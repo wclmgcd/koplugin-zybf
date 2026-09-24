@@ -101,6 +101,13 @@ local function save_shelf_cache(settings, books)
     else
         if Log then Log.warn("shelf cache save failed: cannot open " .. path) end
     end
+    -- 书架刚刷新过：books 是权威的最新列表，顺手清理 links/ 下已不在书架中的
+    -- 代理链接（服务端删书后主页/历史的残留条目）。放在这里是因为所有成功
+    -- 刷新路径都经过本函数，且此时缓存与内存列表一致。
+    local ok_hs, HistorySync = pcall(require, "fanqie.history_sync")
+    if ok_hs and HistorySync and HistorySync.prune then
+        pcall(HistorySync.prune, books)
+    end
 end
 
 -- 书架缓存读取：内存主源 + 文件后备 + 回填

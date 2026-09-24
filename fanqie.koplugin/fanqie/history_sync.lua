@@ -127,4 +127,48 @@ M.findBookById = function(settings, book_id)
     return nil
 end
 
+-- prune(books) — 书架刷新后清理 links/ 下的孤儿链接。
+-- books 是本次刷新得到的完整书架列表；其中不再存在的 book_id，对应的链接文件、
+-- 侧车目录（含自定义封面）和阅读历史条目一并删除，作用等同 legado 的
+-- BookLinks:verifyBooksMetadata()。
+-- 番茄没有"删除书籍"这个本地操作（书架只读地跟随服务端），所以在服务端删书后，
+-- 这里是唯一的清理时机。列表为空时不清理（可能是接口异常返回），避免误删全部。
+-- 注意：书名/作者改名会改变链接路径，旧文件因 book_id 仍在书架里而被保留，
+-- 点开仍正常，只是历史中会多一条旧标题的条目。
+M.prune = function(books)
+    if not (H.is_tbl(books) and #books > 0) then return end
+    local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
+    if not (ok_lfs and lfs) then return end
+    local ok, err = pcall(function()
+        local alive = {}
+        for _, b in ipairs(books) do
+            if b and b.book_id then alive[tostring(b.book_id)] = true end
+        end
+
+        local dir = M.get_links_dir()
+        local ReadHistory = require("readhistory")
+        for entry in lfs.dir(dir) do
+            if entry ~= "." and entry ~= ".." and entry:match("%.html$") then
+                local lnk = dir .. "/" .. entry
+                local ok_r, conf = pcall(dofile, lnk)
+                local book_id = ok_r and H.is_tbl(conf) and conf.book_id
+                if not book_id or not alive[tostring(book_id)] then
+                    if ReadHistory.removeItemByPath then
+                        pcall(ReadHistory.removeItemByPath, ReadHistory, lnk)
+                    end
+                    local ok_d, ds = pcall(DocSettings.open, DocSettings, lnk)
+                    if ok_d and ds and ds.purge then pcall(ds.purge, ds) end
+                    os.remove(lnk)
+                end
+            end
+        end
+    end)
+    if not ok then
+        local ok_l, Log = pcall(require, "fanqie.logger")
+        if ok_l and Log and Log.warn then
+            Log.warn("[FanQie] history_sync prune failed:", tostring(err))
+        end
+    end
+end
+
 return M
