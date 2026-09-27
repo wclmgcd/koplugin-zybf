@@ -419,8 +419,8 @@ function FanQiePlugin:showParaReviewDetail(index)
         Async.run(function()
             local c = Client:new(self_ref.settings)
             local ident_str = tostring(ident)
-            local is_dahuilang = ident_str:find("czyl.cf", 1, true)
-            local is_qingtian = ident_str:find("gyks.cf", 1, true)
+            local is_dahuilang = c:ident_matches_source("dahuilang", ident)
+            local is_qingtian = c:ident_matches_source("qingtian", ident)
 
             if Log then
                 Log.info("[段评] showParaReviewDetail(异步): idx=" .. tostring(review_index)
@@ -448,9 +448,8 @@ function FanQiePlugin:showParaReviewDetail(index)
     else
         -- 降级：Async 模块未加载（极端情况），同步执行
         local c = self_ref.client or Client:new(self_ref.settings)
-        local ident_str = tostring(ident)
-        local is_dahuilang = ident_str:find("czyl.cf", 1, true)
-        local is_qingtian = ident_str:find("gyks.cf", 1, true)
+        local is_dahuilang = c:ident_matches_source("dahuilang", ident)
+        local is_qingtian = c:ident_matches_source("qingtian", ident)
         local ok, result
         if is_dahuilang and not is_qingtian then
             ok, result = pcall(function() return c:dahuilang_get_para_review(ident) end)
@@ -1162,7 +1161,7 @@ function FanQiePlugin:showDahuilangConfigDialog(touchmenu_instance)
             {
                 description = _("服务器地址"),
                 text = cfg.server_url or "",
-                hint = "https://legado.gyks.cf/",
+                hint = "http://219.154.201.122:5006",
             },
             {
                 description = _("邮箱"),
@@ -1340,7 +1339,14 @@ end
 
 function FanQiePlugin:showServerDetectionDialog(source_id, touchmenu_instance)
     local cfg = self.settings:get_source(source_id)
-    local servers = cfg.servers or {}
+    -- 没写 config.lua 时 cfg.servers 为空，会直接报「列表为空」，
+    -- 而 client 里那份内置线路表（含域名备用线路）根本没机会被探测。
+    local servers = cfg.servers
+    if not servers or #servers == 0 then
+        servers = source_id == "dahuilang"
+            and self.client:get_dahuilang_server_list()
+            or self.client:get_qingtian_server_list()
+    end
     local source_name = source_id == "dahuilang" and _("大灰狼") or _("晴天")
     
     if #servers == 0 then

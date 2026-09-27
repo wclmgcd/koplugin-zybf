@@ -42,26 +42,22 @@ return {
     },
 
     -- 大灰狼聚合服务器配置
-    -- 可用后端地址（任选其一，程序会自动检测可用线路）：
-    --   https://v2.czyl.cf
-    --   https://v4.czyl.cf
-    --   https://v5.czyl.cf
-    --   https://v7.czyl.cf
-    --   https://v8.czyl.cf
-    --   https://v9.czyl.cf
-    --   https://v10.czyl.cf
+    -- 当前确认能用的是裸 IP 直连（明文 HTTP，别写成 https）；
+    -- 下面的 vN.lang.uk 是域名线路，现在解析不到，留着是因为 IP 会变，
+    -- 平台把域名指回来后不用改代码。自动检测命中即停，留着不拖慢。
     dahuilang = {
         -- 大灰狼服务器地址（默认使用第一个可用线路）
-        server_url = "https://v2.czyl.cf",
-        -- 可用服务器列表（自动检测时按顺序尝试）
+        server_url = "http://219.154.201.122:5006",
+        -- 可用服务器列表（自动检测时按顺序尝试，命中即停）
         servers = {
-            "https://v2.czyl.cf",
-            "https://v4.czyl.cf",
-            "https://v5.czyl.cf",
-            "https://v7.czyl.cf",
-            "https://v8.czyl.cf",
-            "https://v9.czyl.cf",
-            "https://v10.czyl.cf",
+            "http://219.154.201.122:5006",
+            "https://v2.lang.uk",
+            "https://v4.lang.uk",
+            "https://v5.lang.uk",
+            "https://v7.lang.uk",
+            "https://v8.lang.uk",
+            "https://v9.lang.uk",
+            "https://v10.lang.uk",
         },
         -- 大灰狼账号（邮箱）
         username = "",

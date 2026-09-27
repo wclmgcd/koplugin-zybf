@@ -310,6 +310,36 @@ function ChapterListing:onMenuHold(item)
 
             UIManager:show(autoturn_spin)
         end
+    }}, {{
+        -- 换源原本只在目录左上角菜单里，但「这一章 A 源没内容」正是读到这章才发现的，
+        -- 所以章节长按菜单里也要有一份
+        text = table.concat({Icons.FA_GLOBE, " 换源"}),
+        callback = function()
+            if not NetworkMgr:isConnected() then
+                return MessageBox:notice("操作失败，请检查网络")
+            end
+            UIManager:close(dialog)
+            UIManager:nextTick(function()
+                require("Legado/BookSourceResults"):changeSourceDialog(self.bookinfo, function()
+                    self:onReturn()
+                end)
+            end)
+        end
+    }, {
+        text = table.concat({Icons.FA_TRASH, " 清理本章缓存"}),
+        callback = function()
+            UIManager:close(dialog)
+            Backend:HandleResponse(Backend:cleanChapterCache(chapter), function(data)
+                self:refreshItems(true)
+                if H.is_tbl(data) and (data.removed or 0) > 0 then
+                    MessageBox:notice(string.format("已清理 %d 项，下次进入本章重新获取", data.removed))
+                else
+                    MessageBox:notice("本章没有缓存文件，已重置下载标记")
+                end
+            end, function(err_msg)
+                MessageBox:error('清理失败:', err_msg)
+            end)
+        end
     }}}
 
     local dialog_title = table.concat({"[", tostring(item.text), ']'})

@@ -144,11 +144,13 @@ M.addchapterT = function(title, content)
     local html = [=[
 <?xml version="1.0" encoding="utf-8"?><!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>%s</title><link href="%s" type="text/css" rel="stylesheet"/><style>p + p {margin-top: 0.5em;}</style>
+<head><title>%s</title><link href="%s" type="text/css" rel="stylesheet"/><style>p + p {margin-top: 0.5em;}%s</style>
 </head><body><h2 class="head"><span class="chapter-sequence-number">%s</span><br />%s</h2>
 <div>%s</div></body></html>]=]
     local part, subpart = split_title_advanced(title)
-    return string.format(html, title, resCss, part or "", subpart or "", content)
+    -- 段评样式内联：设备上的 legado.css 是一次性拷贝，旧副本里没有这条规则
+    local pc_css = require("Legado/ParaComment").css()
+    return string.format(html, title, resCss, pc_css, part or "", subpart or "", content)
 end
 
 -- ============================================================

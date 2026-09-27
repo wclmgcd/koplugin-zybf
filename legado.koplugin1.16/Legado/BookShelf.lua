@@ -1,6 +1,7 @@
 -- Legado/BookShelf.lua
 local BD = require("ui/bidi")
 local CoverMenu = require("Legado/CoverMenu")
+local Menu = require("ui/widget/menu")
 local Device = require("device")
 local UIManager = require("ui/uimanager")
 local Event = require("ui/event")
@@ -52,6 +53,22 @@ local function init_book_shelf(parent)
             dimen = self.title_bar.left_button.image.dimen
         end
         parent:openMenu(dimen)
+    end
+
+    -- 标题栏右上角那个 × 走的是 Menu:onClose → onCloseAllMenus。平时书架底下垫着文件浏览器，
+    -- 关掉就是回主页；但打开一本书时 KOReader 会把 FileManager 拆掉（crash.log 里
+    -- 「Tearing down FileManager」），于是从阅读器/试读退回书架后，书架就是窗口栈里最后一个，
+    -- 这点 × 等于把栈清空 —— KOReader 正常收尾（exit code 0），在 Kindle 上看着跟闪退一模一样。
+    -- 所以：如果关完就剩空栈，先把文件浏览器垫回去（openLegadoFolder 整个排在 nextTick 里，
+    -- 赶在 handleInput 那句「No dialogs left to show」之前）。
+    function book_shelf:onCloseAllMenus()
+        local is_last_window = UIManager:getNthTopWidget(1) == self
+            and UIManager:getNthTopWidget(2) == nil
+        local handled = Menu.onCloseAllMenus(self)
+        if is_last_window then
+            parent:openLegadoFolder(parent:getBrowserHomeDir())
+        end
+        return handled
     end
     
     function book_shelf:onFocusRight()
@@ -197,6 +214,9 @@ local function init_book_shelf(parent)
                                         Backend:HandleResponse(response, function(data)
                                             MessageBox:notice("删除成功")
                                             self:refreshItems(true)
+                                            if H.is_func(self.parent_ref.syncRemoteOrder) then
+                                                self.parent_ref:syncRemoteOrder(true)
+                                            end
                                         end, function(err_msg)
                                             MessageBox:error('删除失败：', err_msg)
                                         end)
@@ -211,9 +231,22 @@ local function init_book_shelf(parent)
         UIManager:show(dialog)
     end
 
+    -- pos 是 KOReader MenuItem 归一化后的行内坐标(0..1)。旧值 0.8 把整行右侧
+    -- 20% 都划成菜单热区，而标题文字正好延伸到那里，墨水屏上短点就弹长按菜单。
+    -- 热区改为最右侧约一个 ⋮ 图标的宽度。
+    local CONTEXT_ZONE_SIZE = 48
+
+    function book_shelf:_contextMenuXThreshold()
+        local screen_w = Device.screen:getWidth()
+        local item_w = self.item_dimen and self.item_dimen.w or screen_w
+        local zone = Device.screen:scaleBySize(CONTEXT_ZONE_SIZE)
+        if item_w <= 0 or zone * 2 >= item_w then return 0.8 end
+        return 1 - (zone / item_w)
+    end
+
     function book_shelf:onMenuSelect(entry, pos)
         if entry.select_enabled == false then return true end
-        local selected_context_menu = pos ~= nil and pos.x > 0.8
+        local selected_context_menu = pos ~= nil and pos.x > self:_contextMenuXThreshold()
         if selected_context_menu then
             self:onMenuHold(entry, pos)
         else

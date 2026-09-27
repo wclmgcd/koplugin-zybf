@@ -301,23 +301,37 @@ function M:showBookInfo(bookinfo)
         return MessageBox:error("书籍信息错误")
     end
 
-    local button_text = (self.call_mode == "SEARCH" or self.call_mode == "EXPLORE") and '添加' or '换源'
+    local is_add_mode = self.call_mode == "SEARCH" or self.call_mode == "EXPLORE"
+    local button_text = is_add_mode and '添加' or '换源'
+
+    local buttons = {
+        {
+            text = button_text,
+            callback = function()
+                if is_add_mode then
+                    self:addBookToLibrary(bookinfo)
+                else
+                    self:changeBookSource(bookinfo)
+                end
+            end,
+        },
+    }
+
+    if is_add_mode and H.is_str(bookinfo.bookUrl) and bookinfo.bookUrl ~= "" then
+        table.insert(buttons, {
+            text = "试读",
+            callback = function()
+                UIManager:nextTick(function()
+                    require("Legado/BookPreview"):begin(bookinfo)
+                end)
+            end,
+        })
+    end
 
     local BookDetailsDialog = require("Legado/BookDetailsDialog")
     local dialog = BookDetailsDialog:new{
         bookinfo = bookinfo,
-        buttons = {
-            {
-                text = button_text,
-                callback = function()
-                    if self.call_mode == "SEARCH" or self.call_mode == "EXPLORE" then
-                        self:addBookToLibrary(bookinfo)
-                    else
-                        self:changeBookSource(bookinfo)
-                    end
-                end,
-            },
-        },
+        buttons = buttons,
     }
     UIManager:show(dialog)
 end
@@ -633,6 +647,8 @@ function M:changeBookSource(bookinfo)
         return Backend:changeBookSource(new_bookinfo)
     end, function(_)
         MessageBox:notice('换源成功')
+        -- 远端排序换了源就变了，自动补一次拉取，省得再去书架手动点
+        UIManager:nextTick(require("Legado/LibraryView").autoSyncRemoteOrder)
     end, function(err_msg)
         MessageBox:error(err_msg or '操作失败')
     end)
@@ -647,6 +663,7 @@ function M:addBookToLibrary(bookinfo)
         return Backend:addBookToLibrary(bookinfo)
     end, function(_)
         MessageBox:notice('添加成功')
+        UIManager:nextTick(require("Legado/LibraryView").autoSyncRemoteOrder)
         self:modifySuccessCallback(true)
     end, function(err_msg)
         MessageBox:error(err_msg or '操作失败')

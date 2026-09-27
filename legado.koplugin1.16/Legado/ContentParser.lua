@@ -9,6 +9,7 @@ local ImageUtil = require("Legado.Helper.ImageUtil")
 local socket_url = require("socket.url")
 local utf8proc = require("Legado.Helper.utf8proc")
 local httpReq = require("Legado.Helper.Http")
+local ParaComment = require("Legado/ParaComment")
 
 local M = {
     config = {
@@ -318,7 +319,9 @@ function M.text_to_html(book_cache_id, content, title)
         local allow_dropcaps = M.config and M.config.enable_dropcaps
         local is_title_line = false
 
-        if allow_dropcaps and not dropcaps and line ~= "" and not lower_line:find("<img", 1, true) then
+        -- 段评占位符以 \001 开头，落在行首时不能进首字下沉，否则占位符会被拆开
+        if allow_dropcaps and not dropcaps and line ~= "" and line:sub(1, 1) ~= "\001"
+                and not lower_line:find("<img", 1, true) then
             -- 尝试清理重复标题 >3 个字，避免单字误判
             if utf8proc.count(title) > 3 and string.find(line, title, 1, true) == 1 then
                 line = utf8proc.utf8_trim(M.plain_text_replace(line, title, "", 1))
@@ -366,6 +369,25 @@ function M.analyzing(chapter, content, filePath, opts)
     local first_line = string.match(content, "([^\n]*)\n?") or content
     local page_type = M.get_content_type(content, first_line)
 
+    -- 段评：先换成占位符，等正文结构处理完再还原成气泡，
+    -- 这样标记不会破坏 get_content_type、剥标签和首字下沉。
+    -- 关掉开关也必须走这一步：占位符最后会被整段删掉，
+    -- 否则书源自带的 <comment> / SVG 气泡会原样留在正文里。
+    local pc_enabled = opts.enable_para_comment
+    local pc_content, pc_list = ParaComment.normalize(content)
+    content = pc_content
+    local para_list = pc_list
+
+    local function finish(result, as_html)
+        if para_list and result.data ~= nil then
+            result.data = ParaComment.restore(result.data, para_list, as_html and pc_enabled)
+        end
+        if as_html and pc_enabled and para_list and #para_list > 0 then
+            pcall(ParaComment.save_index, book_cache_id, chapter.chapters_index, para_list)
+        end
+        return result
+    end
+
     if page_type == 2 then -- IMAGE
         local img_sources = opts.getPorxyPicUrls(bookUrl, content)
         if H.is_tbl(img_sources) and #img_sources > 0 then
@@ -395,6 +417,9 @@ function M.analyzing(chapter, content, filePath, opts)
         local ext, original_name = ImageUtil.get_url_extension(first_line)
         ext = (not ext or ext == "") and err['ext'] or ext
         content = err['data']
+        -- XHTML 正文是另取的一份，段评标记在这份里，重新归一化
+        local xhtml_content, xhtml_list = ParaComment.normalize(content)
+        content, para_list = xhtml_content, xhtml_list
         filePath = string.format("%s.%s", filePath, ext or "")
 
         if H.is_str(original_name) and original_name ~= "" and original_name:find("%.") then
@@ -470,7 +495,7 @@ function M.analyzing(chapter, content, filePath, opts)
                 if relpath then return table.concat({r1, r2, relpath, r2, r4}) end
             end)
         end
-        return { kind = "file", chapter = chapter, filePath = filePath, data = content }
+        return finish({ kind = "file", chapter = chapter, filePath = filePath, data = content }, true)
 
     elseif page_type == 3 then -- MIXED
         filePath = filePath .. '.html'
@@ -484,9 +509,10 @@ function M.analyzing(chapter, content, filePath, opts)
                 end
             end)
         end
-        return { kind = "file", chapter = chapter, filePath = filePath, data = M.text_to_html(book_cache_id, content, chapter_title) }
+        return finish({ kind = "file", chapter = chapter, filePath = filePath, data = M.text_to_html(book_cache_id, content, chapter_title) }, true)
         
     else -- TEXT
+        local as_html = not opts.is_txt
         if opts.is_txt then
             filePath = filePath .. '.txt'
             local paragraphs = M.split_paragraphs(content)
@@ -500,7 +526,7 @@ function M.analyzing(chapter, content, filePath, opts)
             filePath = filePath .. '.html'
             content = M.text_to_html(book_cache_id, content, chapter_title)
         end
-        return { kind = "file", chapter = chapter, filePath = filePath, data = content }
+        return finish({ kind = "file", chapter = chapter, filePath = filePath, data = content }, as_html)
     end
 end
 

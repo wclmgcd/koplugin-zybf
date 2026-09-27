@@ -14,6 +14,7 @@ local TaskProg = require("Legado.task.Progress")
 local Patcher = require("Legado.patches")
 local PlgState = require("Legado/PlgState")
 local Env = require("Legado.Helper.Env")
+local BookPreview = require("Legado/BookPreview")
 
 local Handlers = {}
 
@@ -130,6 +131,10 @@ function Handlers:register(parent_ref)
     end
 
     function parent_ref:onShowLegadoToc(book_cache_id)
+        if BookPreview.showing() then
+            MessageBox:info("试读模式：只能用翻页键续读，加入书架后即可看完整目录")
+            return true
+        end
         local library_obj = LibraryView:getInstance()
         if not library_obj then
             logger.warn("ShowLegadoToc LibraryView instance not loaded")
@@ -244,6 +249,23 @@ function Handlers:register(parent_ref)
                                 settings.disable_browser = not settings.disable_browser or nil
                                 Backend:HandleResponse(Backend:saveSettings(settings), function()
                                     MessageBox:notice(ok_msg)
+                                end, function(err_msg)
+                                    MessageBox:error("设置失败:", err_msg)
+                                end)
+                            end,
+                        }, {
+                            text = "段评气泡",
+                            help_text = "把书源正文里的段评标记统一成上标数字，点击拉取该书源自带的评论接口",
+                            checked_func = function()
+                                return Backend:getSettings().para_comment ~= false
+                            end,
+                            callback = function()
+                                local settings = Backend:getSettings()
+                                local new_state = settings.para_comment == false
+                                settings.para_comment = new_state
+                                Backend:HandleResponse(Backend:saveSettings(settings), function()
+                                    MessageBox:notice((new_state and "已开启段评，" or "已关闭段评，")
+                                        .. "重新下载章节后生效（可用「清空缓存」）")
                                 end, function(err_msg)
                                     MessageBox:error("设置失败:", err_msg)
                                 end)
@@ -512,7 +534,16 @@ function Handlers:register(parent_ref)
             -- menu override — replaces patching
             menu_items.book_status = nil  
             menu_items.book_info = nil
-            menu_items.filemanager.callback = function()
+            -- 这两项不一定存在：开书时 KOReader 会把文件浏览器销毁（crash.log 里
+            -- 「show reader ui」紧跟着「close filemanager」），那时阅读菜单没有
+            -- 「文件浏览器」，直接点 menu_items.filemanager.callback 就是
+            -- attempt to index a nil value —— 这个函数每次打开阅读菜单都跑一遍，
+            -- 未捕获的 Lua 错误会直接把 KOReader 带回系统界面。
+            local function override_menu_item(key, handler)
+                local item = menu_items[key]
+                if H.is_tbl(item) then item.callback = handler end
+            end
+            override_menu_item("filemanager", function()
                 if not (self.ui and self.ui.menu and self.ui.document) then return end
                 self.ui.menu:onTapCloseMenu()
                 local file = self.ui.document.file
@@ -544,20 +575,47 @@ function Handlers:register(parent_ref)
                 end
                 self.ui:onClose()
                 self.ui:showFileManager(target_file)
-            end
-            menu_items.table_of_contents.callback = function()
+            end)
+            override_menu_item("table_of_contents", function()
                 if self.ui and self.ui.handleEvent then
                     self.ui:handleEvent(Event:new("ShowLegadoToc"))
                     -- self.ui.toc:onShowToc()
                 end
-            end  
+            end)
 
             local settings = Backend:getSettings()
 
-            menu_items.Legado_reader_ui_menu = {
-                text = "Legado 选项",
-                sorting_hint = "search",
-                sub_item_table = {{
+            -- 注册一次、点开时才判定：这个钩子只在阅读器建立时跑，而试读可能从已经开着的
+            -- 阅读器里发起，也可能退出后接着读正常书。
+            -- 试读那两项并进「Legado 选项」这一个入口：另开一项的话，阅读菜单上就是两个
+            -- Legado 页签（用户：「legado 相当于有两个选项」）。
+            local function preview_menu_items()
+                -- 用 active() 不用 showing()：showing() 要求屏幕上正是试读章节，第一章还在
+                -- 下载、或刚从别处切回来时会判假，那时唯一退出口没了就出不去
+                if not BookPreview.active() then return nil end
+                return {
+                    {
+                        text = "试读：加入书架",
+                        keep_menu_open = true,
+                        callback = function()
+                            if not BookPreview.active() then
+                                return MessageBox:info("试读已结束")
+                            end
+                            UIManager:nextTick(BookPreview.add_to_shelf)
+                        end,
+                    },
+                    {
+                        text = "试读：返回上级菜单",
+                        separator = true,
+                        callback = function()
+                            BookPreview.exit()
+                        end,
+                    },
+                }
+            end
+
+            local function legado_option_items()
+                return {{
                     text = "流式漫画模式",
                     keep_menu_open = true,
                     checked_func = function()
@@ -619,7 +677,19 @@ function Handlers:register(parent_ref)
                             MessageBox:error("上传进度失败: 没有获取到当前章节")
                         end
                     end,
-                }},
+                }}
+            end
+
+            menu_items.Legado_reader_ui_menu = {
+                text = "Legado 选项",
+                sorting_hint = "search",
+                sub_item_table_func = function()
+                    local items = preview_menu_items() or {}
+                    for _, item in ipairs(legado_option_items()) do
+                        items[#items + 1] = item
+                    end
+                    return items
+                end,
             }
         end
 
@@ -627,6 +697,10 @@ function Handlers:register(parent_ref)
             local library_obj = LibraryView:getInstance()
             if not library_obj then
                 logger.warn("RefreshLegadoChapter LibraryView instance not loaded")
+                return true
+            end
+            if BookPreview.showing() then
+                MessageBox:info("试读模式不支持刷新本章")
                 return true
             end
             if PlgState:readerUiVisible() ~= true then
@@ -757,6 +831,14 @@ function Handlers:register(parent_ref)
         
         function parent_ref:onReaderReady(doc_settings)
             if not (doc_settings and doc_settings.data and self.ui and self.view) then return end
+
+            -- 每一章都是新文档，从页边距里让出来的那条空白要重新垫一次。
+            -- 触发点只留这一个：垫空白是谁先跑谁把这份文档记成已垫过，两处都留等于赌先后。
+            if BookPreview.showing() then
+                UIManager:nextTick(function()
+                    BookPreview.ensure_top_bar()
+                end)
+            end
             
             if not parent_ref:isCachePath(nil, self.ui) then
                 PlgState:readerUiVisible(false)
@@ -894,7 +976,7 @@ function Handlers:register(parent_ref)
                 local library_obj = LibraryView:getInstance()
                 if library_obj then
                     local reading_chapter = PlgState:readingChapter()
-                    if reading_chapter then
+                    if reading_chapter and not BookPreview.active() then
                         UIManager:nextTick(function()
                             Backend:after_reader_chapter_show(reading_chapter)
                         end)

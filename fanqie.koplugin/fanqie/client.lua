@@ -149,7 +149,9 @@ local function transport_request(transport, request, timeout)
     -- LuaSocket returns: body, code, headers, status 或 nil, error_message
     -- 检查是否为nil错误（连接失败、超时等）
     if result1 == nil and type(result2) == "string" then
-        error("transport_request连接失败: " .. result2)
+        error("transport_request连接失败: " .. result2
+            .. " | url=" .. tostring(request and request.url)
+            .. " timeout=" .. tostring(timeout) .. "s")
     end
     return result1, result2, result3, result4
 end
@@ -273,8 +275,8 @@ function Client:check_single_server(server_url)
     local mobile_ua = FanQie.MOBILE_UA
 
     -- 服务器存活探测：超时 10 秒
-    -- 注意：从日志看 v2.czyl.cf /login 实际响应需要 5-6s（国外/慢链路），
-    -- v4.czyl.cf 需要 8s，这些都是"正常"完成时间。超时必须留足 10s，
+    -- 注意：大灰狼线路是国外/慢链路，/login 实际响应可能要 5-8s，这些都是"正常"完成
+    -- 时间。超时必须留足 10s，否则会把所有正常服务器误判为超时，导致检测不到可用线路。
     -- 否则会把所有正常服务器误判为超时，导致检测不到可用线路。
     -- 真正死的服务器（如已移除的 api.langge.cf）会在 10s 后超时失败，
     -- 短路逻辑保证找到第一个可用的就停止。
@@ -371,9 +373,17 @@ function Client:get_dahuilang_server_list()
         table.insert(server_urls, dl.server_url)
     end
     local defaults = {
-        "https://v2.czyl.cf",
-        "https://v4.czyl.cf",
-        "https://v5.czyl.cf",
+        -- 裸 IP + 端口的明文 HTTP 服务（该端口 https 不通，别补成 https）
+        "http://219.154.201.122:5006",
+        -- 域名线路现在解析不到，但保留：IP 会变，域名指回来后无需改代码。
+        -- 检测命中即停、且这些也参与段评 ident 归属判断，留着不拖慢。
+        "https://v2.lang.uk",
+        "https://v4.lang.uk",
+        "https://v5.lang.uk",
+        "https://v7.lang.uk",
+        "https://v8.lang.uk",
+        "https://v9.lang.uk",
+        "https://v10.lang.uk",
         "https://legado.gyks.cf",
     }
     for _, d in ipairs(defaults) do
@@ -386,6 +396,35 @@ function Client:get_dahuilang_server_list()
         end
     end
     return server_urls
+end
+
+-- 段评 ident 是下载时烤进章节缓存的绝对 URL，平台换址后旧缓存里仍是老地址。
+-- 判断该走哪家的评论接口，用「ident 属于哪个书源的服务器列表」，不再写死域名。
+local function url_host(u)
+    local authority = tostring(u or ""):match("^%a[%a%d+.-]*://([^/?#]*)")
+    if not authority then return nil end
+    authority = authority:match("@([^@]+)$") or authority
+    local ipv6 = authority:match("^%[(.-)%]")
+    if ipv6 then return ipv6:lower() end
+    return ((authority:match("^(.-):%d+$") or authority):lower())
+end
+
+function Client:ident_matches_source(source_id, ident)
+    local ident_host = url_host(ident)
+    if not ident_host then return false end
+    local list
+    if source_id == "dahuilang" then
+        list = self:get_dahuilang_server_list()
+    elseif source_id == "qingtian" then
+        list = self:get_qingtian_server_list()
+    end
+    for _, base in ipairs(list or {}) do
+        local host = url_host(base)
+        if host and (ident_host == host or ident_host:sub(-#host - 1) == "." .. host) then
+            return true
+        end
+    end
+    return false
 end
 
 -- ============================================================================
@@ -1184,6 +1223,21 @@ function Client:dahuilang_login(override_server_url)
     local ok_logger, logger_mod = pcall(require, "fanqie.logger")
     local function log_info(...) if ok_logger and logger_mod then logger_mod.info(...) end end
     local function log_error(...) if ok_logger and logger_mod then logger_mod.error(...) end end
+
+    -- 菜单里的「立即登录」不经过 ensure_token 的自动选路，用的就是设置里那一条 server_url。
+    -- 换域名后旧地址会留在持久化设置里，直接登录必然连接失败，所以先探一次，
+    -- 不通就从线路表里挑一条可用的顶上（并写回设置，后续请求跟着新地址）。
+    if not override_server_url then
+        local alive = self:check_single_server(server_url)
+        if not alive then
+            local detected = self:check_servers(self:get_dahuilang_server_list())
+            if detected.found then
+                log_info("[FanQie] 大灰狼登录改用可用线路:", "from=" .. server_url, "to=" .. detected.available)
+                server_url = detected.available
+                self.settings:set_source_field("dahuilang", "server_url", server_url)
+            end
+        end
+    end
 
     -- 生成 device_id
     local device_id = H.trim(dl.device_id or "")

@@ -71,7 +71,7 @@ KOReader 插件，用于在电纸书设备上阅读番茄小说。
 
 ### 第一步：注册账号
 
-1. 浏览器访问 `https://v2.czyl.cf`（大灰狼官网）
+1. 浏览器访问 `http://219.154.201.122:5006`（大灰狼官网，注意是 `http` 不是 `https`）
 2. 注册账号（邮箱 + 密码）
 3. 注册成功后，将账号密码填入 `config.lua`
 
@@ -81,11 +81,16 @@ KOReader 插件，用于在电纸书设备上阅读番茄小说。
 
 ```lua
 dahuilang = {
-    server_url = "https://v2.czyl.cf",
+    server_url = "http://219.154.201.122:5006",
     servers = {
-        "https://v2.czyl.cf",
-        "https://v4.czyl.cf",
-        "https://v5.czyl.cf",
+        "http://219.154.201.122:5006",
+        "https://v2.lang.uk",
+        "https://v4.lang.uk",
+        "https://v5.lang.uk",
+        "https://v7.lang.uk",
+        "https://v8.lang.uk",
+        "https://v9.lang.uk",
+        "https://v10.lang.uk",
     },
     username = "你的邮箱@example.com",  -- ← 填入注册邮箱
     password = "你的密码",              -- ← 填入密码
@@ -93,6 +98,9 @@ dahuilang = {
     source = "番茄",                    -- 底层书源
 },
 ```
+
+> **说明**：IP 是当前唯一确认可用的地址，排在最前面，检测命中即停。后面的 `vN.lang.uk`
+> 是域名线路，暂时解析不到，留着是因为 IP 会变——平台把域名指回来后无需改代码。
 
 ### 第三步：在 KOReader 中登录
 
@@ -114,11 +122,16 @@ v2.1.1 起支持扫码登录，**番茄官方书源无需手动配置 Cookie**�
 return {
     -- 大灰狼书源配置（推荐首选）
     dahuilang = {
-        server_url = "https://v2.czyl.cf",
+        server_url = "http://219.154.201.122:5006",
         servers = {
-            "https://v2.czyl.cf",
-            "https://v4.czyl.cf",
-            "https://v5.czyl.cf",
+            "http://219.154.201.122:5006",
+            "https://v2.lang.uk",
+            "https://v4.lang.uk",
+            "https://v5.lang.uk",
+            "https://v7.lang.uk",
+            "https://v8.lang.uk",
+            "https://v9.lang.uk",
+            "https://v10.lang.uk",
         },
         username = "",          -- 注册邮箱
         password = "",          -- 密码

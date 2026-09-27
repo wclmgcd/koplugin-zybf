@@ -16,6 +16,7 @@ local load_script = require("Legado.Helper.Loader").load_script
 local TaskLock = require("Legado.task.Lock")
 local ImageUtil = require("Legado.Helper.ImageUtil")
 local ContentParser = require("Legado.ContentParser")
+local ParaComment = require("Legado/ParaComment")
 local ConfigValidator = require("Legado.ConfigValidator")
 
 -- 太旧版本缺少这个函数
@@ -479,12 +480,15 @@ function M:_pDownloadChapter(chapter)
         error((response and response.message) or '章节下载失败')
     end
 
-    local filePath = Env.getChapterCacheFilePath(book_cache_id, chapters_index, chapter.name)
+    local settings = self.settings_data and self.settings_data.data
+    local filePath = Env.getChapterCacheFilePath(book_cache_id, chapters_index, chapter.name,
+        ParaComment.cache_suffix(settings))
     local opts = {
         getPorxyPicUrls = function(url, txt) return self:getPorxyPicUrls(url, txt) end,
         getProxyEpubUrl = function(url, line) return self:getProxyEpubUrl(url, line) end,
         getProxyImageUrl = function(url, src) return self:getProxyImageUrl(url, src) end,
         is_txt = self.settings_data.data.istxt == true,
+        enable_para_comment = ParaComment.is_enabled(settings),
     }
     local result = ContentParser.analyzing(chapter, response.body, filePath, opts)
     if result.kind == "cbz" then
@@ -532,7 +536,8 @@ function M:getCacheChapterFilePath(chapter, not_write_db)
         end
     end
 
-    local filePath = Env.getChapterCacheFilePath(book_cache_id, chapters_index, book_name)
+    local filePath = Env.getChapterCacheFilePath(book_cache_id, chapters_index, book_name,
+        ParaComment.cache_suffix(self.settings_data and self.settings_data.data))
 
     local extensions = {'html', 'cbz', 'xhtml', 'txt', 'png', 'jpg'}
 
@@ -1104,6 +1109,70 @@ function M:ChangeChapterCache(chapter)
         self:refreshBookContentAsync(chapter)
         return wrap_response(true)
     end
+end
+
+-- 章节缓存文件名 = <安全化书名>-<章号><段评后缀>.<扩展名>。后缀历史上换过几版，
+-- 清缓存要按这一组后缀逐个试，不能只删 DB 里记着的那一份：错误内容往往正躺在旧后缀文件里。
+local CHAPTER_CACHE_SUFFIXES = { "", "-pc1", "-pc2", "-pc3", "-pc0" }
+local CHAPTER_CACHE_EXTS = { "html", "cbz", "xhtml", "txt", "png", "jpg", "tmp" }
+
+--- 只清某一章的缓存：正文文件 + 它的 .sdr 边车 + DB 里的下载标记。
+--- 只列候选文件名逐个删，不做目录遍历（lfs 遍历 + purgeDir 会把 Kindle 上的 KOReader 直接搞崩）。
+function M:cleanChapterCache(chapter)
+    if not (H.is_tbl(chapter) and H.is_str(chapter.book_cache_id)) then
+        return wrap_response(nil, "章节参数错误")
+    end
+    -- DB 那边要求数字（dynamicUpdateChapters 对非数字直接 error）
+    local chapters_index = tonumber(chapter.chapters_index)
+    if not chapters_index then return wrap_response(nil, "章节参数错误") end
+    chapters_index = math.floor(chapters_index)
+
+    local suffixes = {}
+    suffixes[#suffixes + 1] = ParaComment.cache_suffix(self.settings_data and self.settings_data.data)
+    for _, sfx in ipairs(CHAPTER_CACHE_SUFFIXES) do
+        suffixes[#suffixes + 1] = sfx
+    end
+
+    local exts = {}
+    for _, ext in ipairs(CHAPTER_CACHE_EXTS) do exts[#exts + 1] = ext end
+    -- 漫画类章节的扩展名是书源给的，不补上就删不掉 .zip 之类
+    if H.is_str(chapter.cacheExt) then
+        table.insert(exts, 1, chapter.cacheExt)
+    end
+
+    local removed, seen = 0, {}
+    local function remove_one(full)
+        if type(full) ~= "string" or seen[full] then return end
+        seen[full] = true
+        if not util.fileExists(full) then return end
+        pcall(function() util.removeFile(full) end)
+        if util.fileExists(full) then return end
+        removed = removed + 1
+        -- 边车（阅读位置等）走 KOReader 自己的 purge，别手工 rmdir
+        pcall(function()
+            require("docsettings"):open(full):purge()
+        end)
+    end
+
+    for _, suffix in ipairs(suffixes) do
+        local base = Env.getChapterCacheFilePath(chapter.book_cache_id, chapters_index,
+            chapter.name or "", suffix)
+        for _, ext in ipairs(exts) do
+            remove_one(base .. "." .. ext)
+        end
+    end
+    if H.is_str(chapter.cacheFilePath) then
+        remove_one(chapter.cacheFilePath)
+    end
+
+    pcall(function()
+        self.dbManager:dynamicUpdateChapters(chapter, {
+            content = '_NULL',
+            cacheFilePath = '_NULL'
+        })
+    end)
+
+    return wrap_response({ removed = removed })
 end
 
 function M:refreshBookContentAsync(chapter)

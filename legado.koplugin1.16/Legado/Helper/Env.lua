@@ -74,10 +74,14 @@ M.getCoverCacheFilePath = function(book_cache_id)
     return FS.joinPath(book_cache_path, 'cover')
 end
 
-M.getChapterCacheFilePath = function(book_cache_id, chapters_index, book_name)
+M.getChapterCacheFilePath = function(book_cache_id, chapters_index, book_name, name_suffix)
     book_name = FS.getSafeFilename(book_name)
     local book_cache_path = M.getBookCachePath(book_cache_id)
     local chapter_cache_name = string.format("%s-%s", book_name or "", chapters_index)
+    -- 开关参与文件名，翻开关即让旧章节缓存自然失效，不需要迁移
+    if type(name_suffix) == "string" and name_suffix ~= "" then
+        chapter_cache_name = chapter_cache_name .. name_suffix
+    end
     return FS.joinPath(book_cache_path, chapter_cache_name)
 end
 

@@ -20,6 +20,7 @@ local Env = require("Legado.Helper.Env")
 local FS = require("Legado.Helper.FS")
 
 local PlgState = require("Legado/PlgState")
+local BookPreview = require("Legado/BookPreview")
 local init_book_links = require("Legado/BookLinks")
 local init_book_shelf = require("Legado/BookShelf")
 
@@ -171,6 +172,35 @@ function LibraryView:openBrowserMenu(file)
     UIManager:show(dialog)
 end
 
+-- 拉取远端排序：手动点是「确认 + 报结果」，换源/加书/删书之后自动跑是 quiet
+-- （不弹确认也不报成功，只把书架按新顺序刷出来，失败照样要说话）
+function LibraryView:syncRemoteOrder(quiet)
+    TaskProg.loading(quiet and "同步远端排序 " or "同步中...", function()
+        return Backend:syncAndResortBooks()
+    end, function(state, response)
+        if state ~= true then
+            if not quiet then MessageBox:error('操作失败', '未知错误') end
+            return
+        end
+        Backend:HandleResponse(response, function(_)
+            if not quiet then MessageBox:notice("同步并排序成功") end
+            if self.book_shelf then
+                self.book_shelf:refreshItems(true)
+            end
+        end, function(err_msg)
+            if not quiet then MessageBox:error('操作失败: ', tostring(err_msg)) end
+        end)
+    end)
+end
+
+-- 书架界面还没打开过时不硬把它建出来
+function LibraryView.autoSyncRemoteOrder()
+    local obj = LibraryView.instance
+    if obj then
+        obj:syncRemoteOrder(true)
+    end
+end
+
 function LibraryView:openMenu(dimen)
     local dialog
     self:getInstance()
@@ -199,22 +229,7 @@ function LibraryView:openMenu(dimen)
             UIManager:close(dialog)
             MessageBox:confirm("即将同步远端书架，按最后阅读时间排序。此操作将覆盖本地书架排序（手动置顶的书籍不受影响)\n是否继续？", function(result)
                 if result then
-                    TaskProg.loading("同步中...", function()
-                        return Backend:syncAndResortBooks()
-                    end, function(state, response)
-                        if state == true then
-                            Backend:HandleResponse(response, function(data)
-                                MessageBox:notice("同步并排序成功")
-                                if self.book_shelf then
-                                    self.book_shelf:refreshItems(true)
-                                end
-                            end, function(err_msg)
-                                MessageBox:error('操作失败: ', tostring(err_msg))
-                            end)
-                        else
-                            MessageBox:error('操作失败', '未知错误')
-                        end
-                    end)
+                    self:syncRemoteOrder(false)
                 end
             end, { ok_text = "确定", cancel_text = "取消" })
         end,
@@ -370,6 +385,9 @@ end
 function LibraryView:ReaderUIEventCallback(chapter_direction, ui)
     if not H.is_str(chapter_direction) then return end
 
+    -- 试读：章节序列在内存里，不查数据库
+    if BookPreview.turn(chapter_direction) then return end
+
     local fullpath = ui and ui.document and ui.document.file
     local chapter = PlgState:readingChapter()
     
@@ -419,6 +437,7 @@ function LibraryView:showReaderUI(chapter)
     if not util.fileExists(book_path) then
         return MessageBox:error(book_path, "不存在")
     end
+    BookPreview.adopt(chapter)
     PlgState:readingChapter(chapter)
 
     local toc_obj = self:getBookTocWidget()
