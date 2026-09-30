@@ -12,7 +12,7 @@ local M = {}
 M.PROTO = "legado-para"
 M.CLASS = "para-comment"
 -- normalize() 的匹配规则一变就要递增：章节缓存靠它判新旧，否则旧缓存里的书源气泡图会一直留着
-M.SUFFIX = "-pc3"
+M.SUFFIX = "-pc4"
 -- 关掉段评时用的后缀（同样不能留空，见 cache_suffix）
 M.SUFFIX_OFF = "-pc0"
 -- 占位符不含 < > & " 等字符，可安全穿过 ContentParser 的剥标签 / 转义 / 首字下沉流程
@@ -24,6 +24,12 @@ local HREF_P  = "[hH][rR][eE][fF]%s*=%s*['\"](.-)['\"]"
 local IDENT_P = "[iI][dD][eE][nN][tT]%s*=%s*['\"](.-)['\"]"
 local ID_P    = "[iI][dD]%s*=%s*['\"](.-)['\"]"
 local COUNT_P = "[cC][oO][uU][nN][tT]%s*=%s*['\"]?(%d+)"
+
+-- 起点（段评）这类书源只在正文里留三个号（bid/cid/pid），接口和凭证都要现场拼：
+-- 评论接口固定在 <书源站>/novel/comment/v2/paragraph_list，凭证就藏在服务器发来的
+-- bookUrl 尾巴那段 JSON 里（"headers":{"authorization":"Bearer …"}），照抄即可。
+local QID_API = "/novel/comment/v2/paragraph_list"
+local AUTH_VAL_P = '[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]["\']?%s*:%s*["\']([^"\']+)'
 
 local TEXT_KEYS  = { "content", "text", "commentContent", "replyContent", "comment", "body", "msg", "message" }
 local USER_KEYS  = { "userName", "user_name", "nickName", "nickname", "nick_name", "username", "author", "by" }
@@ -123,7 +129,8 @@ local function svg_display_text(b64)
 end
 
 --- 把正文中的段评标记替换成占位符
--- @return content 处理后的正文, list 序号 -> { count = 气泡数字, url = 评论接口或 nil }
+-- @return content 处理后的正文,
+--         list 序号 -> { count = 气泡数字, label = 显示值, url = 评论接口, qid = {bid,cid,pid} }
 function M.normalize(content)
     local list = {}
     if type(content) ~= "string" or content == "" then return content, list end
@@ -141,30 +148,49 @@ function M.normalize(content)
         })
     end)
 
-    -- 2) 图片形式的段评标记。两种来源：
+    -- 2) 图片形式的段评标记。三种来源：
     --    a. <img src="dp:comment/9">，轻阅读类书源的段评图，没有 HTTP 等价接口；
     --    b. 大灰狼把 <comment> 换成的 SVG 气泡图，评论接口藏在图后面的
     --       {"js":"showCmt('URL',...)"} 点击负载里。该负载自带双引号，写在双引号属性里
     --       本身就是畸形 HTML，所以只能整段匹配 <img> 再从里面抠。
-    --    神评卡片、本章说卡片不在这个之列：它们是 style=FULL 的整幅卡片图（神评卡片第一行
-    --    是「神评论」角标，没有数字可显示），墨水屏上又大又糊，用户要求完全屏蔽，直接丢掉。
+    --    c. 起点（段评）的气泡图：{"style":"TEXT","type":"qd","click":"showCmt(bid,cid,pid,ts)"}
+    --       —— 参数全是不带引号的数字，接口地址一个字节都没给，只能记下前三个号，
+    --       点击时按 bookUrl 的站子拼 paragraph_list（第 4 个参数是服务器生成的时间戳，无用）。
+    --       计数同样只在图里的 <text> 上。
+    --    神评卡片、本章说卡片不在这个之列：它们是整幅卡片图（起点章评卡写作 "style":"full"，
+    --    大灰狼写作 "FULL"；神评卡片第一行是「神评论」角标，没有数字可显示），
+    --    墨水屏上又大又糊，用户要求完全屏蔽，直接丢掉。
     content = content:gsub("<[iI][mM][gG][^>]->", function(tag)
         if tag:find("dp:", 1, true) then
             return push({ count = 0 })
         end
-        if tag:find("showFanqieComment", 1, true) or tag:find('"FULL"', 1, true)
+        if tag:find("showFanqieComment", 1, true) or tag:find("showChapterCmt", 1, true)
+            or tag:find('"FULL"', 1, true) or tag:find('"full"', 1, true)
             or tag:find("god_card_svg", 1, true) then
             return ""
         end
-        local url = tag:match("showCmt%('([^']*)'")
-        if not url then return end
         local b64 = tag:match("data:image/svg%+xml;base64,([%w%+%/=]+)")
-        local label = b64 and svg_display_text(b64) or tag:match("count=(%d+)")
-        return push({
-            label = label,
-            count = tonumber(label and label:match("^%d+")) or 0,
-            url = url:find("^https?://") and url or nil,
-        })
+        local url = tag:match("showCmt%('([^']*)'")
+        if url then
+            local label = b64 and svg_display_text(b64) or tag:match("count=(%d+)")
+            return push({
+                label = label,
+                count = tonumber(label and label:match("^%d+")) or 0,
+                url = url:find("^https?://") and url or nil,
+            })
+        end
+        local bid, cid, pid = tag:match("showCmt%((%d+),%s*(%d+),%s*(%d+)")
+        if bid then
+            local label = b64 and svg_display_text(b64)
+            return push({
+                -- 没有数字可显示时写「评」而不是 0：0 会让人以为这段没人说话
+                label = label or "评",
+                count = tonumber(label and label:match("^%d+")) or 0,
+                qid = { bid = bid, cid = cid, pid = pid },
+            })
+        end
+        -- 认不出的 SVG 点击负载一律丢掉：留着只会把那截畸形 HTML 原样印进正文
+        if tag:find("data:image/svg+xml;base64,", 1, true) then return "" end
     end)
 
     -- 3) <a href="...">[37]</a> 或 <a href="...">37</a>；#锚点是脚注/目录，原样保留
@@ -230,14 +256,16 @@ function M.index_path(book_cache_id, chapters_index)
     return FS.joinPath(dir, tostring(math.floor(chapters_index)) .. ".dat")
 end
 
-function M.save_index(book_cache_id, chapters_index, list)
+--- 索引文件名不带段评后缀，所以老文件必须还能读：第二格 bookUrl 是后加的，缺了就当没有
+-- @param book_url 服务器给该书源拼的 bookUrl（尾巴上那段 JSON 里带着评论接口要用的凭证），可为 nil
+function M.save_index(book_cache_id, chapters_index, list, book_url)
     local path = M.index_path(book_cache_id, chapters_index)
     if not path then return end
     if not (H.is_tbl(list) and #list > 0) then
         if util.fileExists(path) then pcall(util.removeFile, path) end
         return
     end
-    local ok, blob = pcall(buffer.encode, { list })
+    local ok, blob = pcall(buffer.encode, { list, H.is_str(book_url) and book_url or nil })
     if not ok or type(blob) ~= "string" then
         logger.warn("ParaComment: 段评索引序列化失败", tostring(blob))
         return
@@ -248,16 +276,17 @@ function M.save_index(book_cache_id, chapters_index, list)
     fp:close()
 end
 
+--- @return list, book_url
 function M.load_index(book_cache_id, chapters_index)
     local path = M.index_path(book_cache_id, chapters_index)
-    if not path or not util.fileExists(path) then return {} end
+    if not path or not util.fileExists(path) then return {}, nil end
     local fp = io.open(path, "rb")
-    if not fp then return {} end
+    if not fp then return {}, nil end
     local blob = fp:read("*a")
     fp:close()
     local ok, tbl = pcall(buffer.decode, blob)
-    if not ok or not H.is_tbl(tbl) or not H.is_tbl(tbl[1]) then return {} end
-    return tbl[1]
+    if not ok or not H.is_tbl(tbl) or not H.is_tbl(tbl[1]) then return {}, nil end
+    return tbl[1], H.is_str(tbl[2]) and tbl[2] or nil
 end
 
 -- 书源评论接口的返回结构五花八门：广度优先找第一个“元素带正文的数组”
@@ -299,6 +328,11 @@ end
 function M.parse_comments(data, fallback_total)
     local out = { comments = {}, total = tonumber(fallback_total) or 0 }
     if not H.is_tbl(data) then return out end
+    -- 站点用 200 + code≠0 表达业务错误（起点那句「获取段评失败」就是这么回来的），
+    -- 不记下 msg 的话只能回一句「暂无可见数据」，什么也看不出来
+    if type(data.code) == "number" and data.code ~= 0 then
+        out.err = tostring(data.msg or data.error or ("code=" .. tostring(data.code)))
+    end
 
     -- /para_review 这类服务器已经归一化过的返回：条目就在 comments（或 data.comments）里，
     -- 总数在 data.total，别让 BFS 先撞见 hot_comments
@@ -311,6 +345,18 @@ function M.parse_comments(data, fallback_total)
         end
     end
 
+    -- 起点返回里带 paragraph（这段被评论的原文），拿它当标题比只有序号有用
+    local function paragraph_of(root)
+        if not H.is_tbl(root) then return nil end
+        local v = root.paragraph or (H.is_tbl(root.data) and root.data.paragraph)
+        if type(v) ~= "string" then return nil end
+        v = v:gsub("<[^>]->", " "):gsub("%s+", " "):match("^%s*(.-)%s*$")
+        if v == "" then return nil end
+        if #v > 240 then v = v:sub(1, 240) .. "…" end
+        return v
+    end
+    out.paragraph = paragraph_of(data)
+
     local arr = named_list(data)
         or (H.is_tbl(data.data) and named_list(data.data))
         or find_comment_array(data) or (#data > 0 and data or nil)
@@ -322,15 +368,28 @@ function M.parse_comments(data, fallback_total)
 
     for _, raw in ipairs(arr) do
         if H.is_tbl(raw) then
+            -- 用户口径：墨水屏上只要文字段评，图片一个字节都不取。
+            -- 带图的评论只留它自己的文字，imageUrl 根本不看；
+            -- 纯图片评论（没有文字）直接跳过，只数一个「已屏蔽」；
+            -- 纯语音评论留一行说明，不去下那个 m4a。
             local text = deep_pick(raw, TEXT_KEYS, 3)
-            if text and tostring(text) ~= "" then
-                out.comments[#out.comments + 1] = {
-                    user  = tostring(deep_pick(raw, USER_KEYS, 3) or "匿名"),
-                    text  = tostring(text):gsub("<[^>]->", " "):gsub("%s+", " "):match("^%s*(.-)%s*$"),
-                    like  = tonumber(deep_pick(raw, LIKE_KEYS, 3)) or 0,
-                    reply = tonumber(deep_pick(raw, REPLY_KEYS, 3)) or 0,
-                    time  = format_time(deep_pick(raw, TIME_KEYS, 3)),
-                }
+            if type(text) ~= "string" then text = nil end
+            local has_img = H.is_str(raw.imageUrl) and raw.imageUrl ~= ""
+            local has_audio = H.is_str(raw.audioUrl) and raw.audioUrl ~= ""
+            local entry
+            if text and text ~= "" then
+                entry = { text = text:gsub("<[^>]->", " "):gsub("%s+", " "):match("^%s*(.-)%s*$") }
+            elseif has_img then
+                out.skipped = (out.skipped or 0) + 1
+            elseif has_audio then
+                entry = { text = "(语音评论)" }
+            end
+            if entry then
+                entry.user  = tostring(deep_pick(raw, USER_KEYS, 3) or "匿名")
+                entry.like  = tonumber(deep_pick(raw, LIKE_KEYS, 3)) or 0
+                entry.reply = tonumber(deep_pick(raw, REPLY_KEYS, 3)) or 0
+                entry.time  = format_time(deep_pick(raw, TIME_KEYS, 3))
+                out.comments[#out.comments + 1] = entry
             end
         end
     end
@@ -342,25 +401,46 @@ function M.parse_comments(data, fallback_total)
     return out
 end
 
-function M:fetch(url, count, callback)
-    local Backend = require("Legado/Backend")
-    -- 书源给的 ident 是给人看的页面（/get_para_review、/fanqie_comment?mode=paragraph…），
-    -- 同一台服务器上换到 /para_review 才是 JSON，参数原样保留即可（实测无需任何登录 Cookie）。
+--- 书源给的评论地址有两种形态，只改写其中一种：
+---   给人看的页面（/get_para_review、/fanqie_comment?mode=paragraph…）——
+---     同一台服务器上换到 /para_review 才是 JSON，参数原样保留（实测无需任何登录 Cookie）；
+---   本来就是 JSON 接口的（起点 /novel/comment/v2/paragraph_list）—— 原样用，改写就打不开。
+function M.resolve_api_url(url)
     local host, path, query = url:match("^(https?://[^/]+)(/[^?]*%?)(.*)$")
-    if host and (path:find("review", 1, true) or path:find("comment", 1, true)) then
-        url = host .. "/para_review?" .. query
+    if not host then return url end
+    local p = path:sub(1, -2) -- 去掉结尾那个 ?
+    if p:find("paragraph_", 1, true) or p:find("comment/v2", 1, true) then return url end
+    if p:find("review", 1, true) or p:find("comment", 1, true) then
+        return host .. "/para_review?" .. query
     end
+    return url
+end
+
+function M:fetch(url, count, callback, extra_headers)
+    local Backend = require("Legado/Backend")
+    url = M.resolve_api_url(url)
+    local auth = H.is_tbl(extra_headers) and extra_headers.Authorization or nil
     Backend:launchProcess(function()
         local httpReq = require("Legado.Helper.Http")
+        local headers = {
+            ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            ["Accept"] = "application/json, text/plain, */*",
+        }
+        -- 段评接口要的那条 Authorization 只在主进程拿得着（藏在 bookUrl 里），
+        -- 由调用方算好传进来；这里只当一个普通字符串头使
+        if type(auth) == "string" and auth ~= "" then headers.Authorization = auth end
         local status, res = httpReq({
             url = url,
             timeout = 30,
-            headers = {
-                ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                ["Accept"] = "application/json, text/plain, */*",
-            },
+            headers = headers,
         }, true)
-        if not status then error(tostring(res)) end
+        if not status then
+            -- 带着凭证还被拒，八成是 bookUrl 里那个 token 过期了，说人话
+            if type(auth) == "string" and auth ~= "" and tostring(res):find("Remote server error", 1, true) then
+                error("段评凭证已失效（站点返回非 2xx），换个章节重进或重新搜这本书")
+            end
+            error(tostring(res))
+        end
         local json = require("json")
         local ok, decoded = pcall(json.decode, res.data or "", json.decode.simple)
         if not ok or not H.is_tbl(decoded) then
@@ -377,11 +457,24 @@ function M:render(index, review_total, result)
     local total = (H.is_tbl(result) and tonumber(result.total)) or #comments
 
     if #comments == 0 then
-        MessageBox:info(string.format("本条段评共 %d 条评论，暂无可见数据", total))
+        local why = H.is_tbl(result) and H.is_str(result.err) and result.err ~= ""
+            and ("（站点说：" .. result.err .. "）") or ""
+        MessageBox:info(string.format("本条段评共 %d 条评论，暂无可见数据%s", total, why))
         return
     end
 
     local parts = {}
+    -- 起点这类接口一次只给一页（20 条），总数在 total 里；不说清会被当成「就这么几条」
+    if total > #comments then
+        parts[#parts + 1] = string.format("共 %d 条，先显示前 %d 条", total, #comments)
+    end
+    local skipped = H.is_tbl(result) and tonumber(result.skipped) or 0
+    if skipped > 0 then
+        parts[#parts + 1] = string.format("另有 %d 条图片评论已屏蔽（墨水屏不显示图片）", skipped)
+    end
+    if H.is_str(result.paragraph) and result.paragraph ~= "" then
+        parts[#parts + 1] = "原文：" .. result.paragraph
+    end
     for i, comment in ipairs(comments) do
         local header = string.format("%d. %s (赞%d 回复%d)", i,
             tostring(comment.user or "匿名"), tonumber(comment.like) or 0, tonumber(comment.reply) or 0)
@@ -457,6 +550,32 @@ local function chapter_context()
     return { book_cache_id = props.book_cache_id, chapters_index = props.chapters_index }
 end
 
+--- 只给 bookUrl 里没写的东西：起点类书源留下的三个号 -> 评论接口 + 那条码在 bookUrl 里的凭证
+-- @return url, authorization_header_value ；取不到就返回 nil, 说明
+function M.qid_request(qid, book_url)
+    if not H.is_tbl(qid) then return nil, "bad_qid" end
+    if not (qid.bid and qid.cid and qid.pid) then return nil, "bad_qid" end
+    if not H.is_str(book_url) or book_url == "" then return nil, "no_book_url" end
+    local host = book_url:match("^(https?://[^/,%s]+)")
+    if not host then return nil, "bad_host" end
+    local auth = book_url:match(AUTH_VAL_P)
+    if not auth then return nil, "no_token" end
+    -- 起点这类书源的 bookUrl 里写的就是 "Bearer xxx"，整条值已经带前缀了。
+    -- 别在这再补一次：站点把 "Bearer Bearer xxx" 当非法凭证，回 401 Unauthorized。
+    -- （早先那条模式把 Bearer 的第二个 r 漏写了，前缀永远判不出来，就是这么炸的）
+    if not auth:lower():match("^%s*bearer%s") then auth = "Bearer " .. auth end
+    local url = string.format("%s%s?bid=%s&cid=%s&pid=%s&page=1&size=20",
+        host, QID_API, tostring(qid.bid), tostring(qid.cid), tostring(qid.pid))
+    return url, auth
+end
+
+local QID_FAIL = {
+    no_book_url = "本地没有该书源的 bookUrl，拼不出评论接口",
+    bad_host    = "该书源的 bookUrl 里没有站点地址，拼不出评论接口",
+    no_token    = "该书源没把段评凭证（token）交给设备，点不出评论",
+    bad_qid     = "段评索引缺少 bid/cid/pid",
+}
+
 --- 点击气泡入口：index 为段评在本章内的序号
 function M:show(index)
     local MessageBox = require("Legado/MessageBox")
@@ -470,14 +589,36 @@ function M:show(index)
         return false
     end
 
-    local list = M.load_index(chapter.book_cache_id, chapter.chapters_index)
+    local list, book_url = M.load_index(chapter.book_cache_id, chapter.chapters_index)
     local item = list[index]
     if not H.is_tbl(item) then
         MessageBox:info("段评索引缺失，请清缓存后重新下载本章")
         return false
     end
 
-    local url = H.is_str(item.url) and item.url:match("^https?://.+") or nil
+    local url, headers
+    if H.is_str(item.url) and item.url:match("^https?://.+") then
+        -- 大灰狼类：书源在正文里就把评论接口写全了
+        url = item.url
+    elseif H.is_tbl(item.qid) then
+        -- 起点类：索引里只有号；凭证优先用本章下载时存下的 bookUrl，再退回内存里那份
+        local sources = {}
+        if H.is_str(book_url) then sources[#sources + 1] = book_url end
+        local alt = require("Legado/PlgState"):readingChapter()
+        if H.is_tbl(alt) and H.is_str(alt.bookUrl) then sources[#sources + 1] = alt.bookUrl end
+        local reason
+        for _, src in ipairs(sources) do
+            url, reason = M.qid_request(item.qid, src)
+            if url then break end
+        end
+        if not url then
+            -- 成功时第二个返回值是凭证，失败时是失败原因
+            MessageBox:info(string.format("第 %d 段：%s", index,
+                QID_FAIL[reason] or "该书源未提供段评接口"))
+            return false
+        end
+        headers = { Authorization = reason }
+    end
     if not url then
         MessageBox:info(string.format("第 %d 段：该书源未提供段评接口", index))
         return false
@@ -490,7 +631,7 @@ function M:show(index)
             return
         end
         M:render(index, #list, result)
-    end)
+    end, headers)
     return true
 end
 

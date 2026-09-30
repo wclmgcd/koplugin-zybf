@@ -1113,7 +1113,7 @@ end
 
 -- 章节缓存文件名 = <安全化书名>-<章号><段评后缀>.<扩展名>。后缀历史上换过几版，
 -- 清缓存要按这一组后缀逐个试，不能只删 DB 里记着的那一份：错误内容往往正躺在旧后缀文件里。
-local CHAPTER_CACHE_SUFFIXES = { "", "-pc1", "-pc2", "-pc3", "-pc0" }
+local CHAPTER_CACHE_SUFFIXES = { "", "-pc1", "-pc2", "-pc3", "-pc4", "-pc0" }
 local CHAPTER_CACHE_EXTS = { "html", "cbz", "xhtml", "txt", "png", "jpg", "tmp" }
 
 --- 只清某一章的缓存：正文文件 + 它的 .sdr 边车 + DB 里的下载标记。

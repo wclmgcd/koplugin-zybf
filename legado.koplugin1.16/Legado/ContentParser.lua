@@ -383,7 +383,9 @@ function M.analyzing(chapter, content, filePath, opts)
             result.data = ParaComment.restore(result.data, para_list, as_html and pc_enabled)
         end
         if as_html and pc_enabled and para_list and #para_list > 0 then
-            pcall(ParaComment.save_index, book_cache_id, chapter.chapters_index, para_list)
+            -- 起点类书源的评论接口只给了号，凭证在 bookUrl 的尾巴上，一并存进索引，
+            -- 点击时才不用再回去查数据库
+            pcall(ParaComment.save_index, book_cache_id, chapter.chapters_index, para_list, bookUrl)
         end
         return result
     end
