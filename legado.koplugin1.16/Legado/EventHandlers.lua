@@ -18,6 +18,17 @@ local BookPreview = require("Legado/BookPreview")
 
 local Handlers = {}
 
+-- KOReader 里一个没人接住的 Lua 错误，代价就是整个应用退到系统界面。下面这几个入口是
+-- 按键/手势直接打到的（切章、刷新、文档就绪、文档关闭），宁可只记一条日志，也不能把人
+-- 甩出阅读器。traceback 一律写进 crash.log，出问题时才有东西可查。
+local function guarded(tag, fn, ...)
+    local ok, err = xpcall(fn, function(e)
+        logger.err("[Legado] " .. tostring(tag) .. " 出错: " .. tostring(e) .. "\n"
+            .. debug.traceback("", 2))
+    end, ...)
+    return ok, err
+end
+
 local function switch_sync_reading(settings)
     settings = H.is_tbl(settings) and settings or Backend:getSettings()
     local ok_msg = settings.sync_reading and "关闭" or "开启"
@@ -694,6 +705,7 @@ function Handlers:register(parent_ref)
         end
 
         function parent_ref:onRefreshLegadoChapter()
+            return guarded("onRefreshLegadoChapter", function()
             local library_obj = LibraryView:getInstance()
             if not library_obj then
                 logger.warn("RefreshLegadoChapter LibraryView instance not loaded")
@@ -707,13 +719,26 @@ function Handlers:register(parent_ref)
                 MessageBox:error("操作失败: 仅支持 Legado 章节")
                 return true
             end
+            -- 这个入口原来一点节流都没有：连点就是几份「删文件 + 起进程重写同一个文件」
+            -- 叠在一起，紧接着又各自换一次文档，网络一慢窗口更长。
+            if Backend:enforceRateLimit(PlgState.last_refresh_chapter_time, 3000) then
+                MessageBox:info("刷新进行中，请稍候")
+                return true
+            end
+            if PlgState:switchPending() then
+                MessageBox:info("正在切换章节，请稍后再刷新")
+                return true
+            end
+            PlgState.last_refresh_chapter_time = time.now()
             local reading_chapter = PlgState:readingChapter()
             if reading_chapter then
                 reading_chapter.isDownLoaded = true
                 Backend:HandleResponse(Backend:ChangeChapterCache(reading_chapter), function(data)
                     MessageBox:notice("刷新成功")
                         UIManager:nextTick(function()
-                            library_obj:loadAndRenderChapter(reading_chapter)
+                            guarded("loadAndRenderChapter(刷新)", function()
+                                library_obj:loadAndRenderChapter(reading_chapter)
+                            end)
                         end)
                     end, function(err_msg)
                         MessageBox:error('操作失败:', tostring(err_msg))
@@ -722,6 +747,7 @@ function Handlers:register(parent_ref)
                 MessageBox:error("操作失败: 没有获取到当前章节")
             end
             return true
+            end)
         end
 
         function parent_ref:onDocSettingsLoad(doc_settings, document)
@@ -830,6 +856,9 @@ function Handlers:register(parent_ref)
         end
         
         function parent_ref:onReaderReady(doc_settings)
+            -- 新文档已经上屏（或已换成非 Legado 的书），本轮切章到此结束，
+            -- 后面的翻页不再被「切章进行中」挡住。
+            PlgState:switchPending(false)
             if not (doc_settings and doc_settings.data and self.ui and self.view) then return end
 
             -- 每一章都是新文档，从页边距里让出来的那条空白要重新垫一次。
@@ -896,7 +925,9 @@ function Handlers:register(parent_ref)
                     end
                 end
 
-                make_pages_continuous(chapter_direction)
+                guarded("make_pages_continuous", function()
+                    make_pages_continuous(chapter_direction)
+                end)
             end
         end
 
@@ -924,7 +955,9 @@ function Handlers:register(parent_ref)
                         PlgState.last_page_turn_time = time.now()
                         UIManager:nextTick(function()
                             local chapter_direction = "prev"
-                            library_obj:ReaderUIEventCallback(chapter_direction, self.ui)
+                            guarded("ReaderUIEventCallback(prev)", function()
+                                library_obj:ReaderUIEventCallback(chapter_direction, self.ui)
+                            end)
                         end)
                     else
                         parent_ref:openLibraryView()
@@ -934,10 +967,15 @@ function Handlers:register(parent_ref)
             end
 
             self.eventListener.onCloseDocument = function()
+                -- 这里跑在旧文档的拆除过程里，本身就可能踩到已经不完整的东西；
+                -- 千万别让这一步把 KOReader 一起带走。注意不能在这里清「切章进行中」，
+                -- 那会儿新文档还没就绪，清了等于把闸门白白打开。
+                return guarded("onCloseDocument", function()
                 if parent_ref:isCachePath(nil, self.ui) then
                     PlgState:readerUiVisible(false)
-                    if not (parent_ref.ui and parent_ref.ui._ref_legado_wrapped) then
-                        require("readhistory"):removeItemByPath(self.document.file)
+                    local doc = self.document or (self.ui and self.ui.document)
+                    if not (parent_ref.ui and parent_ref.ui._ref_legado_wrapped) and doc then
+                        require("readhistory"):removeItemByPath(doc.file)
                     end
                     local library_obj = LibraryView:getInstance()
                     if library_obj then
@@ -947,6 +985,7 @@ function Handlers:register(parent_ref)
                         end
                     end
                 end
+                end)
             end
 
             self.eventListener.onEndOfBook = function()
@@ -957,7 +996,9 @@ function Handlers:register(parent_ref)
                         PlgState.last_page_turn_time = time.now()
                         UIManager:nextTick(function()
                             local chapter_direction = "next"
-                            library_obj:ReaderUIEventCallback(chapter_direction, self.ui)
+                            guarded("ReaderUIEventCallback(next)", function()
+                                library_obj:ReaderUIEventCallback(chapter_direction, self.ui)
+                            end)
                         end)
                     else
                         UIManager:nextTick(function()

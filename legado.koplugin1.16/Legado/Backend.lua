@@ -1181,12 +1181,57 @@ function M:refreshBookContentAsync(chapter)
     end)
 end
 
+-- 通知条放不下太长的文本；原因串本身已由 Helper/Error.map_message 清洗过，通常很短。
+-- 截断按 UTF-8 边界回退，否则会把一个汉字切成半个、显示成乱码。
+local function shorten_notice(msg, max_len)
+    if not H.is_str(msg) then return nil end
+    msg = msg:gsub("%s+", " "):match("^%s*(.-)%s*$")
+    if msg == "" then return nil end
+    max_len = max_len or 60
+    if #msg > max_len then
+        local cut = max_len
+        while cut > 0 do
+            local b = msg:byte(cut + 1)
+            if not b or b < 0x80 or b >= 0xC0 then break end
+            cut = cut - 1
+        end
+        msg = msg:sub(1, cut) .. "…"
+    end
+    return msg
+end
+
+-- spawnProcess 自身失败时 r1 是这几个裸标识串，翻成人话
+local SPAWN_FAILURE_TEXT = {
+    start_failed        = "后台任务启动失败",
+    timeout             = "后台任务超时",
+    serialization_error = "返回数据解析失败",
+}
+
 function M:saveBookProgressAsync(chapter)
     self:launchProcess(function()
             return self:saveBookProgress(chapter)
         end, function(_, response)
-        if not (H.is_tbl(response) and response.type == 'SUCCESS') then
-            -- local message = type(response) == 'table' and response.message or "阅读进度自动上传失败"
+        if H.is_tbl(response) and response.type == 'SUCCESS' then return end
+
+        -- 上游原本把原因注释掉了，界面只剩一句「自动上传进度失败」，分不清是网络
+        -- 抖动、服务端报错还是登录失效。这里恢复出来：提示条显示截断版，日志留全量。
+        -- 原因来自 handleResponse 的第二个返回值，经 wrap_response 放进 response.message，
+        -- 再随 spawnProcess 的 fork 序列化回来（中文/长串均已实测可完整往返）。
+        local reason
+        if H.is_tbl(response) then
+            reason = response.message
+        elseif H.is_str(response) then
+            reason = SPAWN_FAILURE_TEXT[response] or response
+        end
+
+        if H.is_str(reason) and reason ~= "" then
+            logger.warn("Legado.saveBookProgress", "自动上传进度失败:", reason)
+        end
+
+        local short = shorten_notice(reason)
+        if short then
+            self:_show_notice("自动上传进度失败：" .. short)
+        else
             self:_show_notice("自动上传进度失败")
         end
     end)

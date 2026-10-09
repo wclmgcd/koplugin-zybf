@@ -1,12 +1,17 @@
+local time = require("ui/time")
+
 local M = {
     _selected_book = nil,
     _displayed_chapter = nil,
     _chapter_direction = nil,
     _readerui_is_showing = nil,
-    
+    _switch_since = nil,
+    _switch_target = nil,
+
     last_page_turn_time = nil,
     last_reader_ready_time = nil,
-    ui_refresh_time = nil, 
+    last_refresh_chapter_time = nil,
+    ui_refresh_time = nil,
     
     book_links_homedir = nil, 
     shared_meta_data = nil, 
@@ -65,6 +70,34 @@ function M:readerUiVisible(is_showing)
         M._readerui_is_showing = is_showing
     end
     return M._readerui_is_showing
+end
+
+-- 一次切章（下载 + 渲染）从触发到阅读器就绪要好几秒。这段窗口里再来一次触发，就会在
+-- 正在拆除的阅读器上重复 switchDocument —— 叠两次就是整个 KOReader 崩回系统界面。
+-- 判据用时间戳而不是布尔量：万一这轮切换半路失败、再没人来清标记，到点也必须自己
+-- 放行，不能把翻页永久锁死。
+-- target 是这轮要换到的文档路径；下载还没回来时不知道路径，留 nil —— 留 nil 表示
+-- 「忙，但谁也不知道要换到哪」，那种情况下本轮的收尾渲染照样放行。
+local SWITCH_PENDING_MAX_S = 8
+
+function M:switchPending(mark, target)
+    if mark == true then
+        M._switch_since = time.now()
+        M._switch_target = target
+        return M._switch_since
+    elseif mark == false then
+        M._switch_since = nil
+        M._switch_target = nil
+        return nil
+    end
+    local since = M._switch_since
+    if not since then return nil end
+    if time.since(since) >= time.s(SWITCH_PENDING_MAX_S) then
+        M._switch_since = nil
+        M._switch_target = nil
+        return nil
+    end
+    return since, M._switch_target
 end
 
 function M:sharedMetaData(dir, meta_data)

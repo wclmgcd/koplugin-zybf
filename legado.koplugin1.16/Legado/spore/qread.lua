@@ -187,7 +187,9 @@ function M:getBookContentNew(chapter, callback)
           type = 0, --1表示强制不走缓存
       })
   end, callback, {
-      timeouts = {18, 25}
+      timeouts = {18, 25},
+      -- 服务端偶发 200 + 空 body，dkjson 解不动直接抛错；补试一次基本就有内容
+      retries = 1,
   }, 'getBookContent')
   
   if not H.is_tbl(ret) then
@@ -513,7 +515,12 @@ function M:saveBookProgress(chapter, callback)
             pos = 0, --pos 0.2
         })
     end, callback, {
-        timeouts = {3, 5}
+        -- 后台静默上传，失败只有一句提示，没必要为它保最紧的预算：{3,5} 在热点刚
+        -- 唤醒或服务端要现抓书源时基本必超时（日志里 wantread 二十次）。
+        -- 公网 + 轻阅读实测：{8,12} 补试 1 次仍偶有连续 wantread（10/09 14:55），
+        -- 因此提到 2 次。
+        timeouts = {8, 12},
+        retries = 2,
     }, 'saveBookProgress')
   end
 

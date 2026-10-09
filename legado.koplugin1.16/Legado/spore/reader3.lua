@@ -186,7 +186,9 @@ function M:saveBook(bookinfo, callback)
             v = os.time()
         })
     end, callback, {
-        timeouts = {18, 25}
+        timeouts = {18, 25},
+        -- 与 qread 同因：服务端偶发 200 + 空 body，dkjson 解不动直接抛错
+        retries = 1,
     }, 'getBookContent')
   end
 
@@ -230,7 +232,10 @@ function M:refreshBookContent(chapter, callback)
             v = timestamp,
         })
     end, callback, {
-        timeouts = {3, 5}
+        -- 与 qread 同一处理由：后台静默上传，{3,5} 太紧，几乎全挂在 wantread 上。
+        -- 公网后端实测 {8,12} 补试 1 次仍偶有连续 wantread，提到 2 次。
+        timeouts = {8, 12},
+        retries = 2,
     }, 'saveBookProgress')
   end
 

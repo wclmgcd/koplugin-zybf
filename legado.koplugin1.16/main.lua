@@ -92,7 +92,7 @@ function Legado:addToMainMenu(menu_items)
             PlgState.is_low_version = is_low_version
         end
         local main_menu = {
-            text = "Legado 书目(Koreader 版本低，建议升级)",
+            text = "Legado 书目(Koreader 版本过低，插件不可用)",
             sorting_hint = "search",
             help_txt = "本插件仅支持 2024.11 以上",
             callback = function() end,
@@ -107,10 +107,12 @@ function Legado:addToMainMenu(menu_items)
 end
 
 function Legado:openLibraryView()
-    self.library_view = LibraryView:fetchAndShow()
+    -- 书架入口固定打开书架列表，不进「Legado​书目」那个文件管理器目录（见 LibraryView:fetchAndShow）
+    self.library_view = LibraryView:fetchAndShow(true)
     UIManager:nextTick(function()
         Backend:backupDbWithPreCheck()
-        Backend:checkOta()
+        -- 原来这里还跟着一次 Backend:checkOta()：打开书架就顺手联网查上游新版本、
+        -- 弹窗劝你升级。修改版升回去就把改动全冲掉，升级功能整体摘掉了。
     end)
 end
 

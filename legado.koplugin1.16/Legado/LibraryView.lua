@@ -268,6 +268,9 @@ function LibraryView:openLegadoFolder(path, focused_file, selected_files, done_c
         if ReaderUI and ReaderUI.instance then
             ReaderUI.instance:onClose()
             PlgState:readerUiVisible(false)
+            -- 人是自己退出阅读器进书架/文件管理器的，这一轮的「切章进行中」要跟着作废：
+            -- 不清的话，8 秒内再从文件管理器点开同一本书会被当成重复请求丢掉。
+            PlgState:switchPending(false)
         end
         if FileManager.instance then
             FileManager.instance:reinit(path, focused_file, selected_files)
@@ -320,15 +323,32 @@ function LibraryView:loadAndRenderChapter(chapter)
     if (H.is_tbl(cache_chapter) and H.is_str(cache_chapter.cacheFilePath)) then
         self:showReaderUI(cache_chapter)
     else
+        if PlgState:switchPending() then
+            -- 上一轮还没落地（正在下载或正在换文档），这一轮直接丢掉：连着按会叠出好几个
+            -- 下载弹窗，各自的回调再各自换一次文档，就是在拆到一半的阅读器上换两遍文档。
+            logger.info("loadAndRenderChapter: 切章进行中，忽略本次请求")
+            return
+        end
+        PlgState:switchPending(true)
         Backend:closeDbManager()
         return TaskProg.loading("正在下载正文 ", function()
             return Backend:downloadChapter(chapter)
         end, function(state, response)
-            if state == true then
+            if state ~= true then
+                -- 任务被取消/失败：标记不清掉的话，接下来几秒的翻页会全被当成重复请求
+                PlgState:switchPending(false)
+            else
                 Backend:HandleResponse(response, function(data)
                     -- 同步下载, 图片章节打包 kind=="cbz"
                     if H.is_tbl(data) and data.kind == "cbz" then
                         local pending = data
+                        if not H.is_tbl(pending.img_sources) or #pending.img_sources == 0 then
+                            -- 服务端超时给半截响应时解析不出图片列表，这里不判空就是
+                            -- attempt to get length of a nil value —— 没人接住就整个退到系统界面
+                            PlgState:switchPending(false)
+                            MessageBox:error("章节图片列表为空，请稍后重试")
+                            return
+                        end
                         local cbz_writer = require("Legado.task.QueueCbz"):new()
                         local total_imgs = #pending.img_sources
                         local progress_bar
@@ -358,22 +378,26 @@ function LibraryView:loadAndRenderChapter(chapter)
                                     end)
                                 else
                                     if progress_bar then progress_bar:close() end
+                                    PlgState:switchPending(false)
                                     MessageBox:error('章节打包失败')
                                 end
                             end,
                         })
                         if not started then
                             if progress_bar then progress_bar:close() end
+                            PlgState:switchPending(false)
                             MessageBox:error('章节打包启动失败: ' .. tostring(start_err))
                         end
                         return
                     end
                     if not H.is_tbl(data) or not H.is_str(data.cacheFilePath) then
+                        PlgState:switchPending(false)
                         MessageBox:error('下载失败')
                         return
                     end
                     self:showReaderUI(data)
                 end, function(err_msg)
+                    PlgState:switchPending(false)
                     MessageBox:notice("请检查并刷新书架")
                     MessageBox:error(err_msg or '错误')
                 end)
@@ -435,8 +459,17 @@ function LibraryView:showReaderUI(chapter)
     if not (H.is_tbl(chapter) and H.is_str(chapter.cacheFilePath)) then return end
     local book_path = chapter.cacheFilePath
     if not util.fileExists(book_path) then
+        PlgState:switchPending(false)
         return MessageBox:error(book_path, "不存在")
     end
+    local pending_since, pending_target = PlgState:switchPending()
+    if pending_since and pending_target and pending_target ~= book_path then
+        -- 上一轮的文档还没换完。此时再 switchDocument 一次，就是在拆到一半的阅读器上
+        -- 取它已经不存在的 document —— 未捕获的 Lua 错误会把 KOReader 整个带回系统界面。
+        logger.info("showReaderUI: 上一次切章未完成，忽略", book_path)
+        return
+    end
+    PlgState:switchPending(true, book_path)
     BookPreview.adopt(chapter)
     PlgState:readingChapter(chapter)
 
@@ -444,16 +477,27 @@ function LibraryView:showReaderUI(chapter)
     if toc_obj and UIManager:isWidgetShown(toc_obj) then
         UIManager:close(toc_obj)
     end
-    if ReaderUI.instance then
-        ReaderUI.instance:switchDocument(book_path, true)
-    else
-        UIManager:broadcastEvent(Event:new("SetupShowReader"))
-        ReaderUI:showReader(book_path, nil, true)
+    -- 换文档这条链子全在 KOReader 里，出错没人兜底就是闪退；这里接住它，
+    -- 让 traceback 落到 crash.log，人还留在书页上。
+    local ok, err = xpcall(function()
+        if ReaderUI.instance then
+            ReaderUI.instance:switchDocument(book_path, true)
+        else
+            UIManager:broadcastEvent(Event:new("SetupShowReader"))
+            ReaderUI:showReader(book_path, nil, true)
+        end
+    end, function(e)
+        logger.err("[Legado] 换文档出错: " .. tostring(e) .. "\n" .. debug.traceback("", 2))
+    end)
+    if not ok then
+        PlgState:switchPending(false)
     end
 end
 
 function LibraryView:openLastReadChapter(bookinfo)
     if not (H.is_tbl(bookinfo) and bookinfo.cache_id) then return false end
+    -- 从文件管理器/最近阅读进书是一次「重新开始」，上一轮切章留下的标记不能再来挡路
+    PlgState:switchPending(false)
 
     local book_cache_id = bookinfo.cache_id
     local last_read_chapter_index = Backend:getLastReadChapter(book_cache_id)

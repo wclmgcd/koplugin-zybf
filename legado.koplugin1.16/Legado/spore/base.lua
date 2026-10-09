@@ -3,6 +3,7 @@ local logger = require("logger")
 local Screen = require("device").screen
 local util = require("util")
 local LuaSettings = require("luasettings")
+local socket = require("socket")
 local socket_url = require("socket.url")
 local socketutil = require("socketutil")
 local Spore = require("Spore")
@@ -142,6 +143,53 @@ function M:resetAndEnableMiddlewares(includeAuth)
     })
 end
 
+--[[
+    与 Helper/Error.lua 的 pcall 同一套消息清洗，但多留一份 traceback。
+    Error.lua 为了给用户看，把「文件:行号:」前缀正则剥掉了，只剩纯消息 —— 网络
+    请求里最要的恰恰是这个行号，出过一次「attempt to compare number with nil」却
+    完全不知道是谁比的。这里在错误还没栈展开时先把 traceback 抓下来。
+]]
+-- 最近一次失败的完整栈。LuaJIT 的 xpcall 只把错误处理器的第一个返回值带回来
+-- （实测 b=nil），所以用上值把它捎出来，由 handleResponse 决定何时落盘。
+-- 不存在跨调用的脏读：只在 pcall 返回后立刻读；重试那一支不读它，成功那一支清掉它。
+local _last_trace = nil
+
+local function pcall_with_trace(logName, f)
+    local ok, res = xpcall(f, function(e)
+        local err_msg = tostring(e or "unknown error")
+        _last_trace = debug.traceback(err_msg, 3)
+        local first_line = err_msg:match("^(.-)\n%s*stack traceback:") or err_msg:match("^(.-)\r?\n") or err_msg
+        return (first_line:match("^.-:%d+:%s*(.+)$") or first_line):match("^%s*(.-)%s*$")
+    end)
+    if ok then _last_trace = nil end
+    return ok, res
+end
+
+-- 服务端偶发返回 200 + application/json 但 body 为空。dkjson 的 scanvalue 会先做
+-- c >= 48 比较，之后才轮到它自己那句「读到结尾」的兜底，于是抛
+-- "attempt to compare number with nil"。这属于残响应，补试一次基本就有内容。
+-- 下面几条是 dkjson 的报错原文，命中即视为可重试。
+local JSON_DECODE_ERRORS = {
+    "attempt to compare number with nil",
+    "no valid json value",
+    "unexpected character at position",
+}
+
+-- 只重试「等不到数据」和「响应体残缺」这两类。域名解析失败、连接被拒、服务不在，
+-- 重试只是让人多等一倍时间。
+local function is_transient_error(err_msg)
+    if type(err_msg) ~= "string" then return false end
+    local lower = err_msg:lower()
+    if lower:match("wantread") or lower:match("timeout")
+        or lower:match("closed") or lower:match("eof") then
+        return true
+    end
+    for _, pattern in ipairs(JSON_DECODE_ERRORS) do
+        if lower:find(pattern, 1, true) then return true end
+    end
+    return false
+end
+
 function M:handleResponse(requestFunc, callback, opts, logName, isRetry)
     local server_address = self.settings.server_address
     logName = logName or 'handleResponse'
@@ -155,11 +203,28 @@ function M:handleResponse(requestFunc, callback, opts, logName, isRetry)
     self:resetAndEnableMiddlewares(true)
   
     socketutil:set_timeout(timeouts[1], timeouts[2])
-    local status, res = errHandler.pcall(requestFunc)
+    local status, res = pcall_with_trace(logName, requestFunc)
     socketutil:reset_timeout()
   
     if not (status and H.is_tbl(res) and H.is_tbl(res.body)) then
         logger.err(logName, "requestFunc err:", tostring(res))
+        -- opts.retries：请求失败时补试的次数，超时预算由 opts.timeouts 自己管
+        local left = H.is_num(opts.retries) and opts.retries or 0
+        if left > 0 and is_transient_error(res) then
+            local next_opts = {}
+            for k, v in pairs(opts) do next_opts[k] = v end
+            next_opts.retries = left - 1
+            logger.info(logName, "请求失败，1 秒后重试，剩余次数", left - 1, "| 原因:", tostring(res))
+            socket.sleep(1)
+            return self:handleResponse(requestFunc, callback, next_opts, logName)
+        end
+        -- 只有「重试也用完了」才落盘完整栈。否则像 200+空 body 这类抖动，明明已经
+        -- 自动救回来，却每天往 crash.log 灌十几段 traceback，看着像故障没修好。
+        -- 反过来，日志里一旦出现 traceback 就说明这次是真没救回来。
+        if _last_trace then
+            logger.err(logName, "traceback:", _last_trace)
+            _last_trace = nil
+        end
         local err_msg = errHandler.map_message(res)
         return nil, string.format("Web 服务: %s", err_msg)
     end
