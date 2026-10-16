@@ -561,6 +561,24 @@ function Content.clean_chapter_content(raw_content, title)
         content = content:sub(1, ad_start - 1)
     end
 
+    -- 移除神评论卡片：书源把热评渲染成内联 SVG 图片塞在段落之间，
+    -- 特征是 <img> 带 ident="/get_para_review?...&god=1&comment_id=..."；
+    -- 正文插图没有 ident 属性，不会误删。
+    -- 必须在 SVG 墨水屏修正与图片统计之前删，否则会白改一遍再算进 input。
+    local god_comment_count = 0
+    content = content:gsub("<[iI][mM][gG][^>]*/?>", function(tag)
+        local ident = tag:match('%sident%s*=%s*"([^"]*)"')
+        if ident and (ident:find("get_para_review", 1, true)
+            or ident:find("god=1", 1, true)) then
+            god_comment_count = god_comment_count + 1
+            return ""
+        end
+        return tag
+    end)
+    if logger and god_comment_count > 0 then
+        logger.info(LOG_MODULE, "[神评] clean_chapter_content: removed=" .. god_comment_count)
+    end
+
     -- ========================================================================
     -- 段评气泡生成（全局占位符方案，参考 kindle-forge 的全局替换）
     -- <comment> 标签可能在 <p> 内部（与文字内联）或外部（段落之间）。
@@ -792,8 +810,8 @@ function Content.clean_chapter_content(raw_content, title)
                 tail = tail:gsub("<br%s*/?>", "\n")
                 tail = tail:gsub("<[^>]+>", "")
                 tail = Content.decode_html_entities(tail)
-                for line in (tail .. "\n"):gmatch("([^\n]+)\n") do
-                    line = H.trim(line)
+                for raw_line in (tail .. "\n"):gmatch("([^\n]+)\n") do
+                    local line = H.trim(raw_line)
                     if line ~= "" then
                         table.insert(lines, "<p>" .. xml_escape(line) .. "</p>")
                     end
@@ -813,8 +831,8 @@ function Content.clean_chapter_content(raw_content, title)
             before = before:gsub("<br%s*/?>", "\n")
             before = before:gsub("<[^>]+>", "")
             before = Content.decode_html_entities(before)
-            for line in (before .. "\n"):gmatch("([^\n]+)\n") do
-                line = H.trim(line)
+            for raw_line in (before .. "\n"):gmatch("([^\n]+)\n") do
+                local line = H.trim(raw_line)
                 if line ~= "" then
                     table.insert(lines, "<p>" .. xml_escape(line) .. "</p>")
                 end
@@ -873,8 +891,8 @@ end
 function Content.txt_to_xhtml(text)
     text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
     local parts = {}
-    for line in (text .. "\n"):gmatch("(.-)\n") do
-        line = line:match("^(.-)%s*$") or ""
+    for raw_line in (text .. "\n"):gmatch("(.-)\n") do
+        local line = raw_line:match("^(.-)%s*$") or ""
         if line ~= "" then
             table.insert(parts, "<p>" .. xml_escape(line) .. "</p>")
         end

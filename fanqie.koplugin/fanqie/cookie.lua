@@ -72,8 +72,8 @@ function Cookie.merge_set_cookie(cookies, set_cookie)
     -- 4. 还原占位符
     local PLACEHOLDER = "\x01"
     sc = sc:gsub("([Ee][Xx][Pp][Ii][Rr][Ee][Ss]=[^,;]-)%,", "%1" .. PLACEHOLDER)
-    for seg in sc:gmatch("[^,\r\n]+") do
-        seg = seg:gsub("^%s+", ""):gsub("%s+$", "")
+    for raw_seg in sc:gmatch("[^,\r\n]+") do
+        local seg = raw_seg:gsub("^%s+", ""):gsub("%s+$", "")
         seg = seg:gsub(PLACEHOLDER, ",")
         if seg ~= "" then
             -- 每条 Set-Cookie 的第一个 key=value 是 cookie 名值对，
