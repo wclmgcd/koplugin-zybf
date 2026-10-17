@@ -429,6 +429,12 @@ function M:changeBookSource(newBookSource)
                 dbg.log('changeBookSource数据写入', tostring(err))
                 return nil, '数据写入出错，请重试'
             end
+            -- 换到新源后旧源的章节记录已失效，清掉让目录按新源重建（cache_id 由 upsertBooks 回填）
+            if H.is_str(response.data.cache_id) then
+                pcall(function()
+                    self.dbManager:clearBookChapters(response.data.cache_id)
+                end)
+            end
             return true
         else
             return nil, '接口返回数据格式错误'

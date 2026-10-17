@@ -599,6 +599,25 @@ function LibraryView:invalidateBookShelf()
     end
 end
 
+-- 换源后 cache_id 不变，refreshBookTocWidget 会复用持有旧死源 origin/bookUrl 的目录 widget，
+-- 导致目录刷新去查已失效的源报错。这里主动丢弃缓存，下次打开按新源重建。
+function LibraryView:invalidateBookToc()
+    if self.book_toc then
+        if UIManager:isWidgetShown(self.book_toc) then
+            UIManager:close(self.book_toc)
+        end
+        self.book_toc = nil
+    end
+end
+
+-- 书架/目录界面还没打开过时不硬把它建出来
+function LibraryView.autoInvalidateBookToc()
+    local obj = LibraryView.instance
+    if obj then
+        obj:invalidateBookToc()
+    end
+end
+
 function LibraryView:getBookTocWidget()
     return self.book_toc
 end

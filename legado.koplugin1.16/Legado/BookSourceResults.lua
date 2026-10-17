@@ -589,8 +589,9 @@ function M:selectBookSource(selectCallback)
                 local with_explore_url = self.call_mode == "EXPLORE"
 
                 for _, v in ipairs(data) do
-                    -- reader3 无 enabled 字段
-                    if H.is_tbl(v) and H.is_str(v.bookSourceName) and H.is_str(v.bookSourceUrl) and (not v.enabled or v.enabled == true) then
+                    -- reader3 无 enabled 字段(nil)时视为启用；qread/legado 的 enabled 为布尔，
+                    -- false 必须排除。旧写法 `not v.enabled` 对 false 也成立，会把禁用源收进列表。
+                    if H.is_tbl(v) and H.is_str(v.bookSourceName) and H.is_str(v.bookSourceUrl) and (v.enabled == nil or v.enabled == true) then
                         if with_explore_url and (not v.enabledExplore and not v.exploreUrl) then
                             goto continue
                         end
@@ -647,7 +648,9 @@ function M:changeBookSource(bookinfo)
         return Backend:changeBookSource(new_bookinfo)
     end, function(_)
         MessageBox:notice('换源成功')
-        -- 远端排序换了源就变了，自动补一次拉取，省得再去书架手动点
+        -- 换源后 cache_id 不变，先丢弃缓存的旧目录 widget（否则复用旧死源导致刷新报错），
+        -- 再补一次远端排序拉取，省得再去书架手动点
+        UIManager:nextTick(require("Legado/LibraryView").autoInvalidateBookToc)
         UIManager:nextTick(require("Legado/LibraryView").autoSyncRemoteOrder)
     end, function(err_msg)
         MessageBox:error(err_msg or '操作失败')

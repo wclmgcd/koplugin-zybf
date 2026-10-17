@@ -1068,6 +1068,22 @@ function M:clearBook(bookShelfId, bookCacheId)
     })()
 end
 
+-- 换源后清掉旧源残留的章节记录（不改 isEnabled）。upsertChapters 只按 chapterIndex 合并，
+-- 从不清理，旧源多出来的章节会变成幽灵条目，打开就报错。
+function M:clearBookChapters(bookCacheId)
+    if not H.is_str(bookCacheId) then
+        dbg.log('DB clearBookChapters error')
+        return false
+    end
+    local del_chapters_sql = "DELETE FROM chapters WHERE bookCacheId = ?"
+    return self:transaction(function()
+        self:execute(del_chapters_sql, {bookCacheId})
+        return true
+    end, {
+        enable_savepoint = false
+    })()
+end
+
 function M:dynamicUpdateChapters(chapter, updateData)
     if not H.is_tbl(updateData) or not H.is_tbl(chapter) then
         dbg.log('dynamicUpdateChapters Required parameter error')

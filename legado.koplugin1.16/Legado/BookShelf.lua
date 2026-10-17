@@ -199,6 +199,24 @@ local function init_book_shelf(parent)
                         self:refreshItems(true)
                     end,
                 }, {
+                    -- 源失效时点书进不了目录，也就够不到目录里的换源入口，
+                    -- 所以在书架三点菜单直接给一个换源，绕开目录
+                    text = "换源",
+                    callback = function()
+                        if not NetworkMgr:isConnected() then
+                            return MessageBox:notice("操作失败，请检查网络")
+                        end
+                        -- BookDetailsDialog 在 callback 返回后会自动 onClose，
+                        -- 用 nextTick 让换源界面等详情框关掉后再弹，避免窗口栈叠错
+                        UIManager:nextTick(function()
+                            require("Legado/BookSourceResults"):changeSourceDialog(bookinfo, function()
+                                if UIManager:isWidgetShown(self) then
+                                    self:refreshItems(true)
+                                end
+                            end)
+                        end)
+                    end,
+                }, {
                     text = "删除",
                     callback = function()
                         MessageBox:confirm(string.format(
