@@ -1928,6 +1928,11 @@ function M.patchUIManagerShow(plugin)
             pcall(M.patchReloadDocument,    plugin, widget)
             pcall(M.wireReaderHomeKey,      plugin, widget)
 
+            -- Any internal replacement that was pending is finished once the
+            -- new ReaderUI is reaching the screen; drop a leftover mark so
+            -- it can never suppress a later real close.
+            UIManager._simpleui_internal_reader_switch = nil
+
             -- Snapshot before clearing below — both the CoverTransition
             -- check further down and the blocker cleanup need to know
             -- whether THIS ReaderUI is the reopened side of a reload; the
@@ -4145,6 +4150,27 @@ function M.patchReloadDocument(plugin, readerui)
 end
 
 -- ---------------------------------------------------------------------------
+-- Internal reader document replacements (chapter switch / next-prev book).
+--
+-- Both ReaderUI:showReader-while-a-reader-is-open and ReaderUI:switchDocument
+-- close the old ReaderUI in place, which fires CloseDocument exactly like a
+-- real book close. From the user's point of view the book was never closed,
+-- so SimpleUIPlugin:onCloseDocument must not show the "Closing book…" notice
+-- or Cover Transition for that teardown. This token is consumed by that
+-- handler; a token (rather than a plain boolean) lets the safety timeout
+-- below avoid clearing a newer mark.
+-- ---------------------------------------------------------------------------
+local function _markInternalReaderSwitch()
+    local token = {}
+    UIManager._simpleui_internal_reader_switch = token
+    UIManager:scheduleIn(20, function()
+        if UIManager._simpleui_internal_reader_switch == token then
+            UIManager._simpleui_internal_reader_switch = nil
+        end
+    end)
+end
+
+-- ---------------------------------------------------------------------------
 -- ReaderUI.showReaderCoroutine — class-level patch, installed once.
 --
 -- KOReader shows a plain "Opening file '...'." InfoMessage synchronously at
@@ -4169,6 +4195,12 @@ function M.patchReaderShowCoroutine(plugin)
 
     local orig = ReaderUI.showReaderCoroutine
     ReaderUI.showReaderCoroutine = function(self, file, provider, seamless)
+        -- A reader is already open, so this call replaces its document
+        -- in place (chapter switch, next/prev book, reload). Mark the
+        -- internal teardown that will fire before the new one is shown.
+        if ReaderUI.instance and file then
+            _markInternalReaderSwitch()
+        end
         -- Reload-triggered reopen (font size, margins, line spacing, ...):
         -- never engage the CoverTransition open side for it — no cover flash
         -- wanted for an internal reload. KOReader's own "Opening file
@@ -4180,6 +4212,30 @@ function M.patchReaderShowCoroutine(plugin)
             CoverTransition._pending_open_file = file
         end
         return orig(self, file, provider, seamless)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- ReaderUI.switchDocument — class-level patch, installed once.
+--
+-- Plugins that call switchDocument directly (e.g. Legado's chapter switch)
+-- close the old ReaderUI synchronously *before* calling showReader, so the
+-- internal-replacement mark must be set before the original runs.
+-- showReaderCoroutine covers the other path (fanqie chapter switches go
+-- through ReaderUI:showReader while an instance is open).
+-- ---------------------------------------------------------------------------
+function M.patchReaderSwitchDocument()
+    local ok, ReaderUI = pcall(require, "apps/reader/readerui")
+    if not ok or not ReaderUI then return end
+    if ReaderUI._simpleui_switch_document_patched then return end
+    ReaderUI._simpleui_switch_document_patched = true
+
+    local orig = ReaderUI.switchDocument
+    ReaderUI.switchDocument = function(self, new_file, ...)
+        if new_file then
+            _markInternalReaderSwitch()
+        end
+        return orig(self, new_file, ...)
     end
 end
 
@@ -4994,6 +5050,7 @@ function M.installAll(plugin)
     M.patchFullscreenWidgets(plugin)
     M.patchUIManagerShow(plugin)
     M.patchReaderShowCoroutine(plugin)
+    M.patchReaderSwitchDocument()
     M.patchUIManagerClose(plugin)
     M.patchMenuInitForPagination(plugin)
     M.patchMenuForNavpager(plugin)

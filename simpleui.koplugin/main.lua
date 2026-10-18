@@ -1778,6 +1778,14 @@ function SimpleUIPlugin:onCloseDocument()
     local is_reload = self._suppress_closing_notice
     self._suppress_closing_notice = nil
 
+    -- An in-place document replacement (chapter switch, next/prev book,
+    -- Legado's switchDocument) tears down the old ReaderUI exactly like a
+    -- real close, but the user never left the book. sui_patches' showReader-
+    -- Coroutine / switchDocument wrappers mark those; consume the mark here
+    -- so the close notice and Cover Transition don't fire mid-book.
+    local internal_switch = UIManager._simpleui_internal_reader_switch
+    UIManager._simpleui_internal_reader_switch = nil
+
     if self._simpleui_suspended then return end
     local ScreenEngine = package.loaded["engines/sui_screen_engine"]
     if not ScreenEngine then return end
@@ -1824,7 +1832,7 @@ function SimpleUIPlugin:onCloseDocument()
     -- (e.g. CoverBrowser not installed, or the book was never indexed) this
     -- silently falls through to the ordinary text notice further down.
     local cover_shown = false
-    if not is_reload then
+    if not is_reload and not internal_switch then
         local Patches = package.loaded["infra/sui_patches"]
         if Patches and Patches.CoverTransition and Patches.CoverTransition.isCloseEnabled() then
             local orig_show = UIManager._simpleui_show_orig or UIManager.show
@@ -1875,7 +1883,7 @@ function SimpleUIPlugin:onCloseDocument()
                 and "never" or "always"
         end
 
-        local suppress = is_reload or cover_shown
+        local suppress = is_reload or internal_switch or cover_shown
 
         if (notice_mode == "always" and not suppress)
                 or (notice_mode == "gesture_only" and via_gesture) then
@@ -1941,14 +1949,17 @@ function SimpleUIPlugin:onCloseDocument()
     local mod_rs   = Registry.get("reading_stats")
     local mod_cr   = Registry.get("currently")
     local mod_cd   = Registry.get("coverdeck")
+    local mod_rc   = Registry.get("recent")
     local all_mods = Registry.list()
 
     local stats_active_for     = {}
     local currently_active_for = {}
     local coverdeck_active_for = {}
+    local recent_active_for    = {}
     local any_stats_active     = false
     local any_currently_active = false
     local any_coverdeck_active = false
+    local any_recent_active    = false
 
     for _, id in ipairs(screen_ids) do
         local pfx = ScreenEngine.getPfx(id)
@@ -1968,10 +1979,13 @@ function SimpleUIPlugin:onCloseDocument()
 
         local c_active  = mod_cr and Registry.isEnabled(mod_cr, pfx) or false
         local cd_active = mod_cd and Registry.isEnabled(mod_cd, pfx) or false
+        local rc_active = mod_rc and Registry.isEnabled(mod_rc, pfx) or false
         currently_active_for[id] = c_active
         coverdeck_active_for[id] = cd_active
+        recent_active_for[id]    = rc_active
         any_currently_active = any_currently_active or c_active
         any_coverdeck_active = any_coverdeck_active or cd_active
+        any_recent_active = any_recent_active or rc_active
     end
 
     -- Tracks, per screen id, whether that screen has pending work below —
@@ -2185,9 +2199,15 @@ function SimpleUIPlugin:onCloseDocument()
     -- fresh prefetchBooks() pass can re-resolve that. Mirrors the Cover Deck
     -- block below exactly, so both book-list modules stay correct regardless
     -- of which one (if any) is active alongside the other on a given screen.
-    if any_currently_active then
+    --
+    -- Recent Books renders from this same shared book-list state (recent_fps
+    -- + prefetched_data, including the per-book progress it displays), so a
+    -- screen that shows Recent without Currently Reading needs the identical
+    -- discard + refresh flag — otherwise it keeps rendering the pre-close
+    -- history order from its warm cache.
+    if any_currently_active or any_recent_active then
         for _, id in ipairs(screen_ids) do
-            if currently_active_for[id] then
+            if currently_active_for[id] or recent_active_for[id] then
                 local inst = ScreenEngine.getInstance(id)
                 if inst then
                     inst._cached_books_state = nil
@@ -2204,13 +2224,16 @@ function SimpleUIPlugin:onCloseDocument()
         end
         -- Surgical invalidation, mirroring the Cover Deck block below: evict
         -- only the closed book's cached stats when its md5 is known, falling
-        -- back to a full flush otherwise.
-        local MC = package.loaded["modules/module_currently"]
-        if MC then
-            if closed_md5 and MC.invalidateCacheForMd5 then
-                MC.invalidateCacheForMd5(closed_md5)
-            elseif MC.invalidateCache then
-                MC.invalidateCache()
+        -- back to a full flush otherwise. Only needed when Currently Reading
+        -- itself is shown — Recent has no per-book stats cache of its own.
+        if any_currently_active then
+            local MC = package.loaded["modules/module_currently"]
+            if MC then
+                if closed_md5 and MC.invalidateCacheForMd5 then
+                    MC.invalidateCacheForMd5(closed_md5)
+                elseif MC.invalidateCache then
+                    MC.invalidateCache()
+                end
             end
         end
     end
@@ -2290,7 +2313,7 @@ function SimpleUIPlugin:onCloseDocument()
     -- never call prefetchBooks, so no sidecar work is needed for them.
     -- Guard: only invalidate surgically when closed_fp is known; a nil fp would
     -- flush the entire cache, discarding valid entries for all other books.
-    local any_book_mod_active = any_currently_active or any_coverdeck_active
+    local any_book_mod_active = any_currently_active or any_coverdeck_active or any_recent_active
     if any_book_mod_active and closed_fp then
         local SH = package.loaded["modules/module_books_shared"]
         if SH and SH.invalidateSidecarCache then
@@ -2303,6 +2326,7 @@ function SimpleUIPlugin:onCloseDocument()
     for _, id in ipairs(screen_ids) do
         if needs_refresh_for[id] then
             local book_mod_active = currently_active_for[id] or coverdeck_active_for[id]
+                or recent_active_for[id]
             local inst = ScreenEngine.getInstance(id)
             if inst then
                 if is_reload then

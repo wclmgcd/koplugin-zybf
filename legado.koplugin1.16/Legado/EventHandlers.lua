@@ -970,7 +970,12 @@ function Handlers:register(parent_ref)
                 -- 这里跑在旧文档的拆除过程里，本身就可能踩到已经不完整的东西；
                 -- 千万别让这一步把 KOReader 一起带走。注意不能在这里清「切章进行中」，
                 -- 那会儿新文档还没就绪，清了等于把闸门白白打开。
-                return guarded("onCloseDocument", function()
+                --
+                -- 不要 return guarded(...)：guarded 返回 ok，成功时是 true，而
+                -- 这个 listener 挂在 ReaderUI 的 2 号位，WidgetContainer 遇到
+                -- 第一个返回 true 的 handler 就停止派发，会连带吞掉后面所有插件
+                -- 的 onCloseDocument（SimpleUI 回主页刷新、fanqie 关书同步进度）。
+                guarded("onCloseDocument", function()
                 if parent_ref:isCachePath(nil, self.ui) then
                     PlgState:readerUiVisible(false)
                     local doc = self.document or (self.ui and self.ui.document)
