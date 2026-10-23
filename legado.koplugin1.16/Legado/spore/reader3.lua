@@ -157,8 +157,10 @@ function M:saveBook(bookinfo, callback)
     end
   
     local bookUrl = bookinfo.bookUrl
-    -- refresh=true：仅清除缓存场景强制绕过服务器目录缓存
+    -- refresh=true：用户主动刷新（下拉目录/清理缓存），强制绕过服务器目录缓存
     local refresh = bookinfo.refresh == true and 1 or 0
+    -- 强制刷新要等服务器同步回源，18s 对慢书源不够，放宽到 60s
+    local timeouts = refresh == 1 and {20, 60} or {10, 18}
     return self:handleResponse(function()
           return self.client:getChapterList({
               url = bookUrl,
@@ -166,7 +168,7 @@ function M:saveBook(bookinfo, callback)
               v = os.time()
           })
     end, callback, {
-      timeouts = {10, 18}
+      timeouts = timeouts
   }, 'getChapterList')
   end
   

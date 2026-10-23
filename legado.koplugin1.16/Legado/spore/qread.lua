@@ -150,8 +150,10 @@ function M:getChapterListNew(bookinfo, callback)
     local bookUrl = bookinfo.bookUrl
     local bookSourceUrl = bookinfo.origin
     local bookname = H.is_str(bookinfo.name) and bookinfo.name or (H.is_str(bookinfo.bookname) and bookinfo.bookname or "")
-    -- refresh=true：仅清除缓存场景绕过 24h 目录缓存
+    -- refresh=true：用户主动刷新（下拉目录/清理缓存），让后端跳过目录缓存同步回源
     local needRefresh = bookinfo.refresh == true and 1 or 0
+    -- 强制刷新要等后端同步回源，18s 对慢书源不够，放宽到 60s（与安卓端一致）
+    local timeouts = needRefresh == 1 and {20, 60} or {10, 18}
     return self:handleResponse(function()
           return self.client:getChapterListNew({
               bookSourceUrl = bookSourceUrl,
@@ -161,7 +163,7 @@ function M:getChapterListNew(bookinfo, callback)
               bookname = bookname,
           })
     end, callback, {
-      timeouts = {10, 18}
+      timeouts = timeouts
   }, 'getChapterList')
 end
 

@@ -378,6 +378,9 @@ function ChapterListing:onRefreshChapters()
                     bookUrl = self.bookinfo.bookUrl,
                     origin = self.bookinfo.origin,
                     name = self.bookinfo.name,
+                    -- 下拉/点刷新是用户主动操作：让后端跳过目录缓存同步回源，
+                    -- 后端抓取失败时仍回退旧目录
+                    refresh = true,
                 }, self._ui_refresh_time)
             end,
             callback = function(ok, result)
