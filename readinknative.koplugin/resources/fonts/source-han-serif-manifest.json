@@ -1,0 +1,145 @@
+{
+  "schema": 3,
+  "family": "ReadInk-SourceHanSerifCN-Medium",
+  "style": "Regular",
+  "weight_class": 400,
+  "glyphs": 30995,
+  "version_source": "Official WeRead E-Ink 2.1.2.10245900_900 bundled Source Han Serif CN Medium asset",
+  "source": {
+    "kind": "verified_official_apk_asset",
+    "app": "WeRead E-Ink",
+    "version": "2.1.2.10245900_900",
+    "apk_url": "https://download.weread.qq.com/pkg/105/releases/2.1.2.10245900_900.apk",
+    "apk_sha256": "04d86bcdc1bbd77cab4ecc4d1c04e869d76dbabc79c60c52a707c64fc3e4b75f",
+    "asset": "assets/fonts/SourceHanSerifCN-Medium_FDK_motify_strip.otf",
+    "bytes": 11373656,
+    "sha256": "c8009023d5233d982f6c84007e898496069e880167959643fcba5630b0742134",
+    "style": "Medium",
+    "weight_class": 500
+  },
+  "license": "SIL Open Font License 1.1; SourceHanSerif-LICENSE.txt; original embedded copyright and license records preserved",
+  "modified": true,
+  "modification": "SFNT family/full/PostScript names isolated; typographic subfamily normalized to Regular; OS/2.usWeightClass changed from 500 to 400 for CRe registration; head checkSumAdjustment rebuilt. Original official Medium outlines, CFF, metrics, layout tables, flags, copyright and license records preserved.",
+  "transform": {
+    "method": "SFNT metadata-only reconstruction; identity names from readinknative/fontsfnt.lua M.rename, followed by name subfamily and OS/2 registration normalization",
+    "changed_name_ids": [
+      1,
+      4,
+      6,
+      16,
+      17
+    ],
+    "subfamily_changes_from_name_only_derivative": [
+      {
+        "name_id": 17,
+        "platform_id": 3,
+        "language_id": 1033
+      },
+      {
+        "name_id": 17,
+        "platform_id": 3,
+        "language_id": 2052
+      }
+    ],
+    "all_name_records_except_family_full_postscript_and_typographic_subfamily_preserved": true,
+    "all_tables_except_name_head_os2_byte_identical": true,
+    "unchanged_tables": [
+      "BASE",
+      "CFF ",
+      "DSIG",
+      "GPOS",
+      "GSUB",
+      "VORG",
+      "cmap",
+      "hhea",
+      "hmtx",
+      "maxp",
+      "post",
+      "vhea",
+      "vmtx"
+    ],
+    "os2_change": {
+      "field": "usWeightClass",
+      "field_offset": 4,
+      "field_bytes": 2,
+      "source_value": 500,
+      "registration_value": 400,
+      "actual_differing_byte_offsets": [
+        5
+      ],
+      "all_other_bytes_preserved": true
+    },
+    "flags_preserved": {
+      "fsSelection": 0,
+      "macStyle": 0
+    },
+    "head_change": "checkSumAdjustment only",
+    "sfnt_checksum": "b1b0afba",
+    "cff_name_index_preserved": [
+      "SourceHanSerifCN-Medium"
+    ],
+    "cff_family_name_preserved": "Source Han Serif CN",
+    "cff_weight_preserved": "Medium"
+  },
+  "validation": {
+    "freetype_before": {
+      "library_version": "2.13.2",
+      "family_name": "Source Han Serif CN",
+      "style_name": "Medium",
+      "postscript_name": "SourceHanSerifCN-Medium",
+      "num_glyphs": 30995,
+      "style_flags": 0,
+      "os2_usWeightClass": 500,
+      "probe_glyph_indices": {
+        "中": 8755,
+        "思": 13347,
+        "源": 17029,
+        "宋": 12172,
+        "体": 9049,
+        "阅": 27096,
+        "墨": 11432,
+        "A": 34,
+        "0": 17
+      }
+    },
+    "freetype_after": {
+      "library_version": "2.13.2",
+      "family_name": "ReadInk-SourceHanSerifCN-Medium",
+      "style_name": "Regular",
+      "postscript_name": "ReadInk-SourceHanSerifCN-Medium",
+      "num_glyphs": 30995,
+      "style_flags": 0,
+      "os2_usWeightClass": 400,
+      "probe_glyph_indices": {
+        "中": 8755,
+        "思": 13347,
+        "源": 17029,
+        "宋": 12172,
+        "体": 9049,
+        "阅": 27096,
+        "墨": 11432,
+        "A": 34,
+        "0": 17
+      }
+    },
+    "glyph_order_unchanged": true,
+    "cmap_unchanged": true,
+    "verified_official_apk_sha256": true,
+    "no_device_rendering_test": true
+  },
+  "files": {
+    "ReadInk-SourceHanSerifCN-Medium.otf": {
+      "bytes": 11373944,
+      "sha256": "4f40bc6d94879fdbc4782d148c54e26bf46ef62d815bbada3a9e1b10ebe49e2b"
+    },
+    "SourceHanSerif-LICENSE.txt": {
+      "bytes": 4463,
+      "sha256": "9ff5bb567e1b92c801fc1069e5fbf992ff8efccacb9db94e5959a5b3ba9bb903"
+    }
+  },
+  "source_style": "Medium",
+  "source_weight": 500,
+  "registration_style": "Regular",
+  "registration_weight": 400,
+  "registration_reason": "This independently selectable family uses the official Medium outlines as its normal face. CRe requests weight 400 for unadjusted body text; declaring the only available face as weight 500 can trigger synthetic lightening. Normalizing only this derived asset to registration weight 400 preserves the original Medium outlines without global font registry changes."
+}

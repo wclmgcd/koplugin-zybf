@@ -1,0 +1,8 @@
+{
+  "source": "https://github.com/notofonts/noto-cjk/blob/main/Serif/OTF/SimplifiedChinese/NotoSerifCJKsc-Black.otf",
+  "source_sha256": "2c2af226af6170ac28730be03b16ee7ffa6144fe54471d9ebe8a03de97b58160",
+  "subset_text": "最近阅读精选好书分类榜单全部排行榜原创精品小说历史文学期刊杂志个人成长经济理财哲学宗教心理学社会文化政治军事计算机互联网科学技术教育学习生活艺术传记职场励志健康家庭两性情感旅游地理漫画男生女生飙升新书热搜神作潜力出版总",
+  "tool": "tools/build_section_font.py (fonttools)",
+  "license": "SIL OFL 1.1; OFL.txt",
+  "subset_sha256": "c3347f9c031d9ce59c3386e9ab76f08c35d27b2ae6d33db849bb02629e58d735"
+}

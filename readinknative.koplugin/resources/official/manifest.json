@@ -1,0 +1,287 @@
+{
+  "source": "WeRead E-Ink 2.1.2 (10245900), Tencent",
+  "source_apk_sha256": "04d86bcdc1bbd77cab4ecc4d1c04e869d76dbabc79c60c52a707c64fc3e4b75f",
+  "conversion": "Decoded Android vector XML to SVG; original geometry and colors retained; Android colorControlNormal tint resolved to black. Resource SHA-256 values refer to decoded XML input bytes. Existing entries are retained when input XML is absent.",
+  "resources": [
+    {
+      "resource": "abc_ic_search_api_material.xml",
+      "sha256": "72bb663fae74c00068001c042c4da579758b8eecf8b2921e158543dc980318ce"
+    },
+    {
+      "resource": "bookshelf.xml",
+      "sha256": "d1bb11a7b6f8c820ca28a6823d222303a60a64bc71074823724db1ded7e62e25"
+    },
+    {
+      "resource": "bookshelf_active.xml",
+      "sha256": "8216d7af07038125110997846ffadf3c7fb0946cf032ddb552f7a53e566ad008"
+    },
+    {
+      "resource": "icon_back_circled.xml",
+      "sha256": "77177d10505ccf2681a4ad82c5fd3fccf60d5a45a00c6b1e5a362dad6899d79a"
+    },
+    {
+      "resource": "icon_bookshelf_archive_empty.xml",
+      "sha256": "025dae22e3b6acd3d29df5c6fdf47094d19f8955d7464598d086c7349ef9cb87"
+    },
+    {
+      "resource": "icon_bookshelf_downloaded.xml",
+      "sha256": "570fb605cda50636c340d2736a4eb6de8edc47e7a190826e05db74ffe3658e44"
+    },
+    {
+      "resource": "icon_bookshelf_error.xml",
+      "sha256": "b1485a1e8b261e498b4fd453e243ca171d0f747866adc73de8b1f6d3ee3df908"
+    },
+    {
+      "resource": "icon_bookshelf_import.xml",
+      "sha256": "0f6a3faa957bd009c81d122e93a0af01464470c1d706b868fc707f77525f99a2"
+    },
+    {
+      "resource": "icon_bookshelf_pre_download.xml",
+      "sha256": "82f63cc1603b4545d1661f78c80013e5bf10556be33462d3525e67d9bc839760"
+    },
+    {
+      "resource": "icon_bookshelf_privacy.xml",
+      "sha256": "2ec158f55c497c6a9f7fbb54bf4c16fcfc8d48ebfc1621531b0477372a8582e7"
+    },
+    {
+      "resource": "icon_bookshelf_select.xml",
+      "sha256": "b1ac789c14221209ce0688236abcd68a9716a3e11984ec8c44735f107e59588f"
+    },
+    {
+      "resource": "icon_bookstore_category.xml",
+      "sha256": "8594c9c2e3f03fca795bbfeb8f5108ee3a6ab8db82982e3ce12dc97594e884de"
+    },
+    {
+      "resource": "icon_chapter_lock.xml",
+      "sha256": "2afbe56a02cee2ae2b82ef6269a3c664887aea64f38032f65e47c5bd5dae5719"
+    },
+    {
+      "resource": "icon_checkbox_big.xml",
+      "sha256": "1abb94f592c0a03aee89891a578e4d6ed2ccd9a8ed3476108f7ad68f453a318d"
+    },
+    {
+      "resource": "icon_checkbox_big_checked.xml",
+      "sha256": "4ea3313f19657cd207c2ba56417a923f15b1d0ecb3a1d9823243a79b2b035f90"
+    },
+    {
+      "resource": "icon_general_bubble_arrow.xml",
+      "sha256": "ea15924f7051236f3416922c7d60b7f926d8618aea5a9f8947cbf661222b1d74"
+    },
+    {
+      "resource": "icon_general_reload.xml",
+      "sha256": "29516ffeb673022c0d6916471f2c37e8ba8854db9c1a6d8d1e03acd5c8da0451"
+    },
+    {
+      "resource": "icon_me_account.xml",
+      "sha256": "000cf4ae18d829371cae49a632a4ee218ac44e1815874a40deaae054a3af640a"
+    },
+    {
+      "resource": "icon_me_arrow.xml",
+      "sha256": "ef12bf672da389d01ea94eff0b78be4b1d2512328c53f13a6e4cf2fa93cc8e71"
+    },
+    {
+      "resource": "icon_me_article.xml",
+      "sha256": "9681042e3fd6330776c9f2daa161c9efbc3e8bd2e7b243ae3271fe55c1b6e0c1"
+    },
+    {
+      "resource": "icon_me_preference.xml",
+      "sha256": "d72cd04da7176b57902429ffec3d6bfecd84cc913718f80abeed7d06c6c04ec0"
+    },
+    {
+      "resource": "icon_me_reader.xml",
+      "sha256": "a517b941d0f6660f8a13db0c46f96da25c64a3e16600873db2e1cb548f6b4afc"
+    },
+    {
+      "resource": "icon_me_update.xml",
+      "sha256": "e71c7cbbd9c70ef1debe117a6188704a7bd034fc7f66aebbcd8e5f6c8d6a2186"
+    },
+    {
+      "resource": "icon_more_operation_secret.xml",
+      "sha256": "96b486e056527799b44d1944308b8bc4770cf75ed6ea149835121a6776dba1d5"
+    },
+    {
+      "resource": "icon_more_operation_secret_remove.xml",
+      "sha256": "599090f998266fc0959eeffb21a61005963d8a0cd553caabd283c074deec2b56"
+    },
+    {
+      "resource": "icon_newidea.xml",
+      "sha256": "fd0bf77c394a9dce7e191c20650f52e1313c14fc862bf2445effb9f827f98ee8"
+    },
+    {
+      "resource": "icon_note_bookmark.xml",
+      "sha256": "7fdd7011f32757ecd80c0f5e83e385fb5db8c8faee299f5f4814eecfa61b3674"
+    },
+    {
+      "resource": "icon_note_header_bookmark.xml",
+      "sha256": "b3edff9be0fefc6e885ed3e9691fc4b57008e28f987e5f0a2cae1d56d2c9ec46"
+    },
+    {
+      "resource": "icon_note_header_bookmark_selected.xml",
+      "sha256": "0d2364c807787d1a808010a74598190c3c34c736067026caac8da447365c785c"
+    },
+    {
+      "resource": "icon_note_review.xml",
+      "sha256": "a2b91aef4d46ca61af50b0ce924da7b61a2b746c5438994fa97c77a4707bd5b7"
+    },
+    {
+      "resource": "icon_note_underline.xml",
+      "sha256": "f12f3499065f08f6aa70bd092c6deea5bc90a08a0577399a62786c3d78b25c14"
+    },
+    {
+      "resource": "icon_page_down.xml",
+      "sha256": "f0882b68ad194a2ee9bdee30cb249e4dd449e5c8531878b84a274e7b83aaf8fe"
+    },
+    {
+      "resource": "icon_page_down_disabled.xml",
+      "sha256": "c0a8db487fcd9ba5b412375f0da3d5c36d8639fe87fde4365d2e4072f82ed3ec"
+    },
+    {
+      "resource": "icon_page_up.xml",
+      "sha256": "08916c63b7eb3e7520aa3244b84a03001fd391567a59cb0a807ac1105ada774b"
+    },
+    {
+      "resource": "icon_page_up_disabled.xml",
+      "sha256": "0c71b5ee3b9721af2f3070fddbaac93159a9d157addbce1f6637812199118bc1"
+    },
+    {
+      "resource": "icon_reader_addbookmark.xml",
+      "sha256": "7ed3f5c18d7283ed375c97871f2186952171b8b4f0f8b0bc31e4d5b4ddadec0c"
+    },
+    {
+      "resource": "icon_reader_deletebookmark.xml",
+      "sha256": "c9b473e19c048d01221c87a00cbeaad2a1dabd75e12bc55f431d00df18101c58"
+    },
+    {
+      "resource": "icon_reader_footer_chapter.xml",
+      "sha256": "1cde810a2ab9671f4f69ba07b64c65e7fb101000163ff3958b6ba1d9f4a2d395"
+    },
+    {
+      "resource": "icon_reader_footer_font.xml",
+      "sha256": "b4f1a7b8a8e135b4be6f30d4976d503255daf877acf73fca8066ccf0ca337ab1"
+    },
+    {
+      "resource": "icon_reader_footer_font_selected.xml",
+      "sha256": "dfcbcb0da6e34b8681a58ccd7d577690894358565c3f62c7bf2e26fdc247cbc1"
+    },
+    {
+      "resource": "icon_reader_footer_progress.xml",
+      "sha256": "6b489519568d447d72821d0250b73a4287045794704491b4ada98fdba1055e42"
+    },
+    {
+      "resource": "icon_reader_footer_progress_selected.xml",
+      "sha256": "81d090dd47286b68bb4e41ae45c6c48e1f384e2de3dd635900e6c410a030532b"
+    },
+    {
+      "resource": "icon_reader_progress_next.xml",
+      "sha256": "e2c467dde208e047cde38ee9046c7c4ece56bd670579609b4f81df0e4efeaf6d"
+    },
+    {
+      "resource": "icon_reader_progress_previous.xml",
+      "sha256": "86966ba657eb1feb8806701bc6eecd2c24ab131658896786deac9df7d9c8924e"
+    },
+    {
+      "resource": "icon_reader_selection_menu_copy.xml",
+      "sha256": "3b1b15f4ed2856721038e4001cebb154896356e0d2571a27cf1818536b60d019"
+    },
+    {
+      "resource": "icon_reader_top_bookshelf.xml",
+      "sha256": "ece38bb9d5817cab15a9ee3935f869529c016447d8a70c906cabf29b82409e48"
+    },
+    {
+      "resource": "icon_reading_chapter_lock.xml",
+      "sha256": "a61ef1c2c1d138a858924828cbb0921cbb750f424021d3e4d0fa6f18d484779d"
+    },
+    {
+      "resource": "icon_reading_menu_delete_underline.xml",
+      "sha256": "db08af18363c83755101048f0b59fb840efa71778a8c6f7b6d98fdff87ec390a"
+    },
+    {
+      "resource": "icon_reading_menu_underline.xml",
+      "sha256": "55dae80e5cd82f308af14769911387cc1bc201c8816a56719d5863e4f14d3dae"
+    },
+    {
+      "resource": "icon_review_detail_comment.xml",
+      "sha256": "754d675c6ba54128a3c38a125bef9b80ff5990a35ff1d6eb3da0f0b4a02c6309"
+    },
+    {
+      "resource": "icon_review_like.xml",
+      "sha256": "4e2bdd3119e1ec18650c1f1a63aa390efa658b16d4d2c3791014117338a4f969"
+    },
+    {
+      "resource": "icon_review_like_selected.xml",
+      "sha256": "bae72b53fe669a91d722a5b718caeeac79a787eb51ab3f1286a24e0e33cdd114"
+    },
+    {
+      "resource": "icon_style_add_note.xml",
+      "sha256": "b1da99af746202a8472bf0532b1fbb94d96fd587ba37b5f38c5ea322ea362250"
+    },
+    {
+      "resource": "icon_tab_bar_find.xml",
+      "sha256": "41ae10a19f721135452ccc3068cf2b8e4d12954a7508f0d25c61ed5c711fec63"
+    },
+    {
+      "resource": "icon_tab_bar_find_selected.xml",
+      "sha256": "202f7ec02885aa81949e296394df283cb8f8ece16c31b8ca4d1548ef74f6d70d"
+    },
+    {
+      "resource": "icon_toolbar_back.xml",
+      "sha256": "0005b85e394f459d2b8d16d9ec3a04841f5c829494d4ce26f0716d8eb57d732b"
+    },
+    {
+      "resource": "icon_toolbar_bookshelf_add.xml",
+      "sha256": "d59265ce30d171639836dcb0eaa5f2e70e2ed7064f21e749683ba4187f96017d"
+    },
+    {
+      "resource": "icon_toolbar_bookshelf_added.xml",
+      "sha256": "4244367f9f33c6a927e125c9103d94362353ec4f033122578e18dfdaa18462ab"
+    },
+    {
+      "resource": "icon_toolbar_bookshelf_remove.xml",
+      "sha256": "105b3fe03456bad795b265ecd7042aa3b4ddb835f0a59c298cb19d7f56b0d5d3"
+    },
+    {
+      "resource": "icon_toolbar_download.xml",
+      "sha256": "313db0d8723f1c02ccc1d87b53a77f22e5ef3d4a98be7bee1763afb410dfc29b"
+    },
+    {
+      "resource": "icon_toolbar_download_done.xml",
+      "sha256": "fb68ebfbb368df15dc0ebcf6a54fd2fabcc22a0854bb8fd2fe6ffa559b7ec3ee"
+    },
+    {
+      "resource": "icon_toolbar_download_error.xml",
+      "sha256": "ab34c0dfd9417cccf8a121880e6046aef83279edb35946012cbe8286271acee2"
+    },
+    {
+      "resource": "icon_toolbar_download_start.xml",
+      "sha256": "3451fa98a1dbb3824dcffab8988a5f1189ebc40b74e1faaf56a6947a0bd993c2"
+    },
+    {
+      "resource": "icon_toolbar_downloading.xml",
+      "sha256": "8b1c09e8633839acbaaa872d562a52863ea21a330df7765eb8e47cb446321911"
+    },
+    {
+      "resource": "icon_toolbar_note.xml",
+      "sha256": "1c25d9192de5ddee0f913fb94cd52dcf490f561233e5e501cd13548e583d029c"
+    },
+    {
+      "resource": "icon_toolbar_pre_download.xml",
+      "sha256": "68a7a8122831733c1a7ce6ac2008d23f6b08cb2c1f9c8e42baf0c57ebc21b1a5"
+    },
+    {
+      "resource": "icon_toolbar_private.xml",
+      "sha256": "351a6dbe67a16ef5f08873cf329796c7ac69021efbfad1e7eaf9f94539f341c8"
+    },
+    {
+      "resource": "icon_toolbar_show_idea.xml",
+      "sha256": "dfc23239f56955b110c368bf880584bf3e6adb7525e2487a6f4367501627cf2c"
+    },
+    {
+      "resource": "me.xml",
+      "sha256": "024200def1a4d1b382d1a7e662b80ec50509655fb3cacf71a790920a74cd994b"
+    },
+    {
+      "resource": "me_active.xml",
+      "sha256": "c7e64811b7718c3168053e7635bc0984dd2396629bb0e206f71664f7fd1ec033"
+    }
+  ]
+}
